@@ -18,10 +18,26 @@ onMounted(() => {
       background: '#090d16',
       foreground: '#e2e8f0',
       cursor: '#38bdf8',
-      selectionBackground: 'rgba(56, 189, 248, 0.3)'
+      selectionBackground: 'rgba(56, 189, 248, 0.3)',
+      black: '#1e222a',
+      red: '#f87171',
+      green: '#4ade80',
+      yellow: '#facc15',
+      blue: '#60a5fa',
+      magenta: '#c084fc',
+      cyan: '#38bdf8',
+      white: '#f1f5f9',
+      brightBlack: '#475569',
+      brightRed: '#ef4444',
+      brightGreen: '#22c55e',
+      brightYellow: '#eab308',
+      brightBlue: '#3b82f6',
+      brightMagenta: '#a855f7',
+      brightCyan: '#06b6d4',
+      brightWhite: '#ffffff'
     },
     fontSize: 13,
-    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+    fontFamily: 'Fira Code, Menlo, Monaco, "Courier New", monospace',
     convertEol: true,
     cursorBlink: true
   })

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -18,7 +19,7 @@ class SubprocessRunnerService:
         extra_args: list[str] | None = None,
         report_json_path: str | None = None
     ) -> AsyncGenerator[str, None]:
-        cmd = ["uv", "run", "pytest", "-v"]
+        cmd = ["uv", "run", "pytest", "-v", "--color=yes"]
 
         if report_json_path:
             cmd.extend(["--json-report", f"--json-report-file={report_json_path}"])
@@ -32,11 +33,17 @@ class SubprocessRunnerService:
         if nodes:
             cmd.extend(nodes)
 
+        env = dict(os.environ)
+        env["PYTHONUNBUFFERED"] = "1"
+        env["PY_COLORS"] = "1"
+        env["FORCE_COLOR"] = "1"
+
         self.proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(self.target_path),
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT
+            stderr=asyncio.subprocess.STDOUT,
+            env=env
         )
 
         yield json.dumps({"type": "status", "data": f"Started process: {' '.join(cmd)}\r\n"})
