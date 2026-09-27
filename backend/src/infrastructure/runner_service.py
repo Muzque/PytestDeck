@@ -6,9 +6,19 @@ from pathlib import Path
 
 
 class SubprocessRunnerService:
-    """Infrastructure service to execute and stream pytest process output."""
+    """Infrastructure service executing and streaming pytest process output via asyncio subprocesses.
+
+    Attributes:
+        target_path: Resolved Path object pointing to target project directory.
+        proc: Active asyncio subprocess handle or None if not running.
+    """
 
     def __init__(self, target_path: str):
+        """Initializes the SubprocessRunnerService instance.
+
+        Args:
+            target_path: Absolute directory path of target repository.
+        """
         self.target_path = Path(target_path).resolve()
         self.proc: asyncio.subprocess.Process | None = None
 
@@ -19,6 +29,17 @@ class SubprocessRunnerService:
         extra_args: list[str] | None = None,
         report_json_path: str | None = None
     ) -> AsyncGenerator[str, None]:
+        """Runs pytest in a subprocess and streams stdout lines asynchronously.
+
+        Args:
+            nodes: Optional list of test node paths/nodeids to execute.
+            marker: Optional pytest marker filter expression (e.g. -m smoke).
+            extra_args: Optional additional command line arguments for pytest.
+            report_json_path: Optional temporary file path to generate JSON report.
+
+        Yields:
+            AsyncGenerator[str, None]: JSON-serialized streaming message chunks (status, stdout, finished).
+        """
         cmd = ["uv", "run", "pytest", "-v", "--color=yes"]
 
         if report_json_path:
@@ -69,6 +90,7 @@ class SubprocessRunnerService:
         yield json.dumps({"type": "finished", "exit_code": exit_code, "summary": summary})
 
     async def abort(self) -> None:
+        """Aborts the currently running subprocess execution cleanly."""
         if self.proc and self.proc.returncode is None:
             try:
                 self.proc.terminate()

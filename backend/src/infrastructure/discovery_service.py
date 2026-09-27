@@ -7,7 +7,14 @@ from typing import Any
 
 
 def parse_pytestdeck_config(config_path: Path) -> dict[str, Any]:
-    """Parse root pytestdeck.toml configuration file."""
+    """Parses the root pytestdeck.toml configuration file.
+
+    Args:
+        config_path: Path object pointing to the target pytestdeck.toml file.
+
+    Returns:
+        dict[str, Any]: Parsed configuration dictionary under [pytestdeck] section.
+    """
     if not config_path.exists():
         return {}
     try:
@@ -21,9 +28,21 @@ def parse_pytestdeck_config(config_path: Path) -> dict[str, Any]:
 
 
 class PytestDiscoveryService:
-    """Infrastructure service to execute pytest collect-only process."""
+    """Infrastructure service executing pytest collect-only process."""
 
     async def collect_raw(self, target_path: str, suite_rel_path: str = "") -> tuple[list[dict[str, Any]], int]:
+        """Executes a subprocess collect-only pytest pass on the target directory.
+
+        Args:
+            target_path: Absolute directory path of the target Python repository.
+            suite_rel_path: Relative directory path of the specific test suite.
+
+        Returns:
+            tuple[list[dict[str, Any]], int]: Raw JSON collectors list and total test item count.
+
+        Raises:
+            ValueError: If target_path does not exist or is not a directory.
+        """
         target_dir = Path(target_path).resolve()
         if not target_dir.exists() or not target_dir.is_dir():
             raise ValueError(f"Invalid target path: {target_path}")
