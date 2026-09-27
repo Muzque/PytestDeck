@@ -212,6 +212,13 @@ onMounted(() => {
           >
             Metrics & Summary
           </button>
+          <button 
+            class="tab-btn" 
+            :class="{ active: activeTab === 'report' }"
+            @click="activeTab = 'report'"
+          >
+            JSON Report
+          </button>
         </div>
 
         <div class="tab-content">
@@ -242,6 +249,13 @@ onMounted(() => {
             </div>
             <div v-else class="no-summary">
               Run tests to view execution summary report.
+            </div>
+          </div>
+
+          <div v-show="activeTab === 'report'" class="tab-pane report-pane">
+            <pre v-if="summary?.report" class="json-code">{{ JSON.stringify(summary.report, null, 2) }}</pre>
+            <div v-else class="no-summary">
+              No JSON report available. Run tests to generate report content.
             </div>
           </div>
         </div>
@@ -440,5 +454,22 @@ onMounted(() => {
   color: var(--text-muted);
   text-align: center;
   margin-top: 40px;
+}
+
+.report-pane {
+  height: 100%;
+  overflow: auto;
+}
+
+.json-code {
+  background: var(--bg-secondary);
+  color: var(--accent-blue);
+  padding: 16px;
+  border-radius: 6px;
+  font-family: 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 0.85rem;
+  overflow: auto;
+  max-height: calc(100vh - 120px);
+  border: 1px solid var(--border-color);
 }
 </style>
