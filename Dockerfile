@@ -1,0 +1,63 @@
+# Multi-stage Dockerfile for PytestDeck
+
+# --- Stage 1: Python Dependency Builder ---
+FROM python:3.11-slim AS python-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app/backend
+
+# Copy project configuration and source code required for hatchling build
+COPY backend/pyproject.toml backend/README.md ./
+COPY backend/src/ ./src/
+
+# Install python dependencies into .venv
+RUN uv sync --no-install-project
+
+# --- Stage 2: Build Vue 3 Frontend ---
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# --- Stage 3: Final Production Runtime ---
+FROM python:3.11-slim AS runner
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+# Copy pre-built virtual environment from python-builder
+COPY --from=python-builder /app/backend/.venv /app/backend/.venv
+
+# Copy backend source code and config files
+COPY backend/pyproject.toml backend/README.md ./backend/
+COPY backend/src/ ./backend/src/
+COPY backend/tests/ ./backend/tests/
+COPY pytestdeck.toml ./
+
+# Copy built frontend static assets from frontend-builder
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+EXPOSE 8000
+
+ENV HOST=0.0.0.0
+ENV PORT=8000
+ENV PATH="/app/backend/.venv/bin:$PATH"
+
+WORKDIR /app/backend
+
+CMD ["uv", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
