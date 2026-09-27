@@ -63,6 +63,35 @@ npm run dev
 
 ---
 
+## 🎯 Tutorial: Changing Target Repositories
+
+PytestDeck allows you to inspect and run tests across any target Python repository.
+
+### Option A: From the UI (Interactive)
+1. Open **`http://127.0.0.1:8000`** in your browser.
+2. Enter the **absolute path** of your target Python repository into the top navigation input field (e.g. `/Users/username/projects/my-python-app`).
+3. Select the test suite directory (e.g. `tests/unit` or `tests/integration`).
+4. Click **Refresh Tree** to scan and populate the interactive test explorer hierarchy.
+
+### Option B: Pre-configuring `pytestdeck.toml`
+Create or update `pytestdeck.toml` at the target repo root to define suite structures:
+
+```toml
+[pytestdeck]
+unit_dir = "tests/unit"
+integration_dir = "tests/integration"
+
+[pytestdeck.suites.unit]
+runner = "pytest"
+ini_file = "tests/unit/pytest.ini"
+
+[pytestdeck.suites.integration]
+runner = "pytest"
+ini_file = "tests/integration/pytest.ini"
+```
+
+---
+
 ## 🧪 Running Automation Commands
 
 All primary automation commands are managed via `Makefile`:
