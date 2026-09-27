@@ -50,7 +50,7 @@ Start the FastAPI dev server (with built SPA assets):
 ```bash
 make run-dev
 ```
-Open **`http://127.0.0.1:8000`** in your browser.
+Open **`http://127.0.0.1:9388`** in your browser.
 
 ### 2. Frontend Development
 
@@ -68,7 +68,7 @@ npm run dev
 PytestDeck allows you to inspect and run tests across any target Python repository.
 
 ### Option A: From the UI (Interactive)
-1. Open **`http://127.0.0.1:8000`** in your browser.
+1. Open **`http://127.0.0.1:9388`** in your browser.
 2. Enter the **absolute path** of your target Python repository into the top navigation input field (e.g. `/Users/username/projects/my-python-app`).
 3. Select the test suite directory (e.g. `tests/unit` or `tests/integration`).
 4. Click **Refresh Tree** to scan and populate the interactive test explorer hierarchy.
@@ -126,10 +126,10 @@ Build the container image using multi-stage cached layers:
 make deploy
 ```
 
-Run the containerized server on port `8000`:
+Run the containerized server on port `9388`:
 
 ```bash
-docker run -p 8000:8000 pytestdeck:latest
+docker run -p 9388:9388 pytestdeck:latest
 ```
 
 ---

@@ -29,7 +29,7 @@ build-frontend: ## Build Vue 3 frontend SPA
 
 run-dev: ## Run development server locally
 	@echo "Starting PytestDeck Dev Server..."
-	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port 8000
+	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port 9388
 
 deploy: ## Build Docker container for deployment
 	@echo "Building Docker container for deployment..."

@@ -52,12 +52,12 @@ COPY pytestdeck.toml ./
 # Copy built frontend static assets from frontend-builder
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-EXPOSE 8000
+EXPOSE 9388
 
 ENV HOST=0.0.0.0
-ENV PORT=8000
+ENV PORT=9388
 ENV PATH="/app/backend/.venv/bin:$PATH"
 
 WORKDIR /app/backend
 
-CMD ["uv", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9388"]

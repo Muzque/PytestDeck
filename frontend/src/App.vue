@@ -29,7 +29,7 @@ const discoverTests = async () => {
   isDiscovering.value = true
   selectedNodes.clear()
   try {
-    const res = await fetch('http://127.0.0.1:8000/api/discover', {
+    const res = await fetch('/api/discover', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -88,7 +88,8 @@ const runTests = () => {
   summary.value = null
   activeTab.value = 'live'
 
-  ws = new WebSocket('ws://127.0.0.1:8000/ws/run')
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws/run`)
 
   ws.onopen = () => {
     const nodesToRun = getExecutionNodes()
