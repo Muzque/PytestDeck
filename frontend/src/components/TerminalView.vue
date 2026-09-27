@@ -31,8 +31,6 @@ onMounted(() => {
   term.open(terminalContainer.value)
   fitAddon.fit()
 
-  term.writeln('\x1b[1;34m=== PytestDeck Terminal Console ===\x1b[0m')
-
   props.logs.forEach(line => term.write(line))
 
   window.addEventListener('resize', handleResize)
@@ -51,7 +49,6 @@ watch(() => props.logs.length, (newLength, oldLength) => {
   if (!term) return
   if (newLength === 0) {
     term.clear()
-    term.writeln('\x1b[1;34m=== PytestDeck Terminal Console ===\x1b[0m')
     return
   }
   const addedLines = props.logs.slice(oldLength || 0)
