@@ -51,7 +51,7 @@ def build_tree_from_collectors(collectors: list[dict[str, Any]], suite_prefix: s
             curr_key = f"{curr_key}/{segment}" if curr_key else segment
 
             if curr_key not in node_map:
-                is_file = i == len(path_segments) - 1 and segment.endswith(".py")
+                is_file = i == len(path_segments) - 1 and segment.endswith((".py", ".feature"))
                 node_type = NodeType.FILE if is_file else NodeType.DIRECTORY
                 node_id_val = filepath if is_file else (f"{suite_clean}/{curr_key}" if suite_clean else curr_key)
                 

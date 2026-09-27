@@ -19,9 +19,9 @@ integration-test: ## Run integration tests
 	@echo "Running Integration Tests..."
 	cd backend && PYTHONPATH=src uv run pytest tests/integration
 
-acceptance-test: ## Run acceptance / BDD tests
+acceptance-test: ## Run acceptance / BDD tests (e.g. make acceptance-test FEATURES="tests/acceptance/features/self_test.feature")
 	@echo "Running Acceptance Tests..."
-	cd backend && PYTHONPATH=src uv run behave tests/acceptance/features
+	cd backend && PYTHONPATH=src uv run behave $(if $(FEATURES),$(FEATURES),tests/acceptance/features)
 
 build-frontend: ## Build Vue 3 frontend SPA
 	@echo "Building Frontend..."

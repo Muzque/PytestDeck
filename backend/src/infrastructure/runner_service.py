@@ -40,9 +40,13 @@ class SubprocessRunnerService:
         Yields:
             AsyncGenerator[str, None]: JSON-serialized streaming message chunks (status, stdout, finished).
         """
-        cmd = ["uv", "run", "pytest", "-v", "--color=yes"]
+        is_behave = nodes and any(n.endswith(".feature") for n in nodes)
+        if is_behave:
+            cmd = ["uv", "run", "behave"]
+        else:
+            cmd = ["uv", "run", "pytest", "-v", "--color=yes"]
 
-        if report_json_path:
+        if not is_behave and report_json_path:
             cmd.extend(["--json-report", f"--json-report-file={report_json_path}"])
 
         if marker:

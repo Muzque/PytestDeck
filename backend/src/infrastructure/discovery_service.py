@@ -47,6 +47,24 @@ class PytestDiscoveryService:
         if not target_dir.exists() or not target_dir.is_dir():
             raise ValueError(f"Invalid target path: {target_path}")
 
+        # Handle Behave feature files discovery if suite is acceptance
+        if "acceptance" in suite_rel_path:
+            suite_dir = target_dir / suite_rel_path
+            collectors = []
+            if suite_dir.exists():
+                feature_files = sorted(suite_dir.rglob("*.feature"))
+                for feat in feature_files:
+                    rel_feat_path = str(feat.relative_to(target_dir))
+                    collectors.append({
+                        "nodeid": rel_feat_path,
+                        "result": [{
+                            "nodeid": rel_feat_path,
+                            "type": "Function",
+                            "lineno": 1
+                        }]
+                    })
+            return collectors, len(collectors)
+
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
             tmp_report = tmp.name
 
