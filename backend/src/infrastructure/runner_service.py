@@ -40,9 +40,11 @@ class SubprocessRunnerService:
         Yields:
             AsyncGenerator[str, None]: JSON-serialized streaming message chunks (status, stdout, finished).
         """
-        is_behave = nodes and any(n.endswith(".feature") for n in nodes)
+        is_behave = bool(
+            nodes and any("acceptance" in n or n.endswith(".feature") for n in nodes)
+        )
         if is_behave:
-            cmd = ["uv", "run", "behave"]
+            cmd = ["uv", "run", "behave", "--color=always"]
         else:
             cmd = ["uv", "run", "pytest", "-v", "--color=yes"]
 
@@ -57,6 +59,7 @@ class SubprocessRunnerService:
 
         if nodes:
             cmd.extend(nodes)
+
 
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
