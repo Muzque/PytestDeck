@@ -1,0 +1,80 @@
+from typing import Any
+
+from domain.models import NodeType, TestNode
+
+
+def build_tree_from_collectors(collectors: list[dict[str, Any]], suite_prefix: str = "") -> TestNode:
+    """Domain service to transform raw pytest collectors output into a domain TestNode tree."""
+    suite_clean = suite_prefix.rstrip("/")
+    root = TestNode(
+        id=suite_clean or "root",
+        name=suite_clean or "tests",
+        type=NodeType.DIRECTORY,
+        path=suite_clean or "tests",
+        children=[],
+    )
+
+    node_map: dict[str, TestNode] = {"": root}
+
+    node_ids: set[str] = set()
+    for col in collectors:
+        for res in col.get("result", []):
+            if res.get("type") in ("Function", "Item", "TestCase"):
+                nid = res.get("nodeid", "")
+                if nid:
+                    if suite_clean and not nid.startswith(suite_clean):
+                        nid = f"{suite_clean}/{nid}"
+                    node_ids.add(nid)
+
+    for node_id in sorted(node_ids):
+        parts = node_id.split("::")
+        filepath = parts[0]
+        func_or_class = parts[1:] if len(parts) > 1 else []
+
+        rel_filepath = filepath
+        if suite_clean and (filepath == suite_clean or filepath.startswith(suite_clean + "/")):
+            rel_filepath = filepath[len(suite_clean):].lstrip("/")
+
+        path_segments = [s for s in rel_filepath.split("/") if s]
+        curr_key = ""
+
+        for i, segment in enumerate(path_segments):
+            parent_key = curr_key
+            curr_key = f"{curr_key}/{segment}" if curr_key else segment
+
+            if curr_key not in node_map:
+                is_file = i == len(path_segments) - 1 and segment.endswith(".py")
+                node_type = NodeType.FILE if is_file else NodeType.DIRECTORY
+                node_id_val = filepath if is_file else (f"{suite_clean}/{curr_key}" if suite_clean else curr_key)
+                
+                node = TestNode(
+                    id=node_id_val,
+                    name=segment,
+                    type=node_type,
+                    path=filepath,
+                    children=[],
+                )
+                node_map[curr_key] = node
+                node_map[filepath] = node
+                node_map[parent_key].children.append(node)
+
+        curr_node_id = filepath
+        for idx, item in enumerate(func_or_class):
+            parent_node_id = curr_node_id
+            curr_node_id = f"{curr_node_id}::{item}"
+
+            if curr_node_id not in node_map:
+                is_function = idx == len(func_or_class) - 1
+                node_type = NodeType.FUNCTION if is_function else NodeType.CLASS
+                node = TestNode(
+                    id=curr_node_id,
+                    name=item,
+                    type=node_type,
+                    path=filepath,
+                    children=[],
+                )
+                node_map[curr_node_id] = node
+                if parent_node_id in node_map:
+                    node_map[parent_node_id].children.append(node)
+
+    return root

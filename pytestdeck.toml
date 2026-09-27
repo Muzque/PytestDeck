@@ -1,0 +1,21 @@
+# PytestDeck Target Configuration
+# Allows configuring test suite directories dynamically for PytestDeck discovery
+
+[pytestdeck]
+# Define custom paths for different test suites (relative to repo root)
+unit_dir = "backend/tests/unit"
+integration_dir = "backend/tests/integration"
+acceptance_dir = "backend/tests/acceptance"
+
+# Default execution options per suite
+[pytestdeck.suites.unit]
+runner = "pytest"
+ini_file = "backend/tests/unit/pytest.ini"
+
+[pytestdeck.suites.integration]
+runner = "pytest"
+ini_file = "backend/tests/integration/pytest.ini"
+
+[pytestdeck.suites.acceptance]
+runner = "behave"
+features_dir = "backend/tests/acceptance/features"
