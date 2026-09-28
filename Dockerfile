@@ -57,6 +57,7 @@ EXPOSE 9388
 ENV HOST=0.0.0.0
 ENV PORT=9388
 ENV PATH="/app/backend/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/backend/src"
 
 WORKDIR /app/backend
 
