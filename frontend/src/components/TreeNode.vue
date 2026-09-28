@@ -20,17 +20,31 @@ const toggleOpen = () => {
   }
 }
 
-const onCheckboxChange = () => {
+const onRowClick = () => {
   emit('toggle-select', props.node)
+}
+
+const onToggleClick = (e) => {
+  e.stopPropagation()
+  toggleOpen()
+}
+
+const onCheckboxClick = (e) => {
+  e.stopPropagation()
+}
+
+const onChildToggleSelect = (targetNode) => {
+  emit('toggle-select', targetNode)
 }
 </script>
 
+
 <template>
   <div class="tree-node">
-    <div class="node-row" :class="{ 'is-selected': isChecked }">
+    <div class="node-row" :class="{ 'is-selected': isChecked }" @click="onRowClick">
       <span 
         class="toggle-icon" 
-        @click="toggleOpen"
+        @click="onToggleClick"
         v-if="node.children && node.children.length > 0"
       >
         {{ isOpen ? '▼' : '▶' }}
@@ -40,9 +54,12 @@ const onCheckboxChange = () => {
       <input 
         type="checkbox" 
         :checked="isChecked" 
-        @change="onCheckboxChange"
+        @click.stop
+        @change="onRowClick"
         class="node-checkbox"
       />
+
+
 
       <span class="type-badge" :class="node.type">
         {{ node.type.substring(0, 3).toUpperCase() }}
@@ -51,15 +68,17 @@ const onCheckboxChange = () => {
       <span class="node-name" :title="node.id">{{ node.name }}</span>
     </div>
 
+
     <div v-if="isOpen && node.children && node.children.length > 0" class="node-children">
       <TreeNode 
         v-for="child in node.children" 
         :key="child.id" 
         :node="child"
         :selectedNodes="selectedNodes"
-        @toggle-select="$emit('toggle-select', $event)"
+        @toggle-select="onChildToggleSelect"
       />
     </div>
+
   </div>
 </template>
 
@@ -74,8 +93,10 @@ const onCheckboxChange = () => {
   gap: 8px;
   padding: 4px 8px;
   border-radius: 4px;
+  cursor: pointer;
   transition: background 0.15s ease;
 }
+
 .node-row:hover {
   background: rgba(255, 255, 255, 0.05);
 }

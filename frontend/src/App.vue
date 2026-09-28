@@ -8,8 +8,9 @@ const activeSuite = ref('backend/tests/unit')
 const isDiscovering = ref(false)
 const isRunning = ref(false)
 const testTree = ref(null)
-const selectedNodes = reactive(new Set())
+const selectedNodes = ref(new Set())
 const activeTab = ref('live')
+
 
 const logs = ref([])
 const exitCode = ref(null)
@@ -27,7 +28,7 @@ const availableSuites = ref([
 
 const discoverTests = async () => {
   isDiscovering.value = true
-  selectedNodes.clear()
+  selectedNodes.value = new Set()
   try {
     const res = await fetch('/api/discover', {
       method: 'POST',
@@ -55,21 +56,23 @@ const collectAllChildIds = (node, idSet = new Set()) => {
 }
 
 const toggleSelectNode = (node) => {
-  const isCurrentlySelected = selectedNodes.has(node.id)
+  const newSet = new Set(selectedNodes.value)
+  const isCurrentlySelected = newSet.has(node.id)
   const allIds = collectAllChildIds(node)
   
   if (isCurrentlySelected) {
-    allIds.forEach(id => selectedNodes.delete(id))
+    allIds.forEach(id => newSet.delete(id))
   } else {
-    // Select root node and all children
-    allIds.forEach(id => selectedNodes.add(id))
+    allIds.forEach(id => newSet.add(id))
   }
+  selectedNodes.value = newSet
 }
 
 // Compute minimal execution targets (avoid passing container file/folder AND child functions simultaneously)
 const getExecutionNodes = () => {
-  const selected = Array.from(selectedNodes)
+  const selected = Array.from(selectedNodes.value)
   if (selected.length === 0) return []
+
 
   return selected.filter(nodeId => {
     return !selected.some(otherId => {
