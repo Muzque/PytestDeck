@@ -17,7 +17,7 @@ COPY backend/pyproject.toml backend/uv.lock* backend/README.md ./
 COPY backend/src/ ./src/
 
 # Install python dependencies into .venv
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen
 
 # --- Stage 2: Build Vue 3 Frontend ---
 FROM node:20-alpine AS frontend-builder
@@ -44,7 +44,7 @@ WORKDIR /app
 COPY --from=python-builder /app/backend/.venv /app/backend/.venv
 
 # Copy backend source code and config files
-COPY backend/pyproject.toml backend/uv.lock* ./backend/
+COPY backend/pyproject.toml backend/uv.lock* backend/README.md ./backend/
 COPY backend/src/ ./backend/src/
 COPY backend/tests/ ./backend/tests/
 COPY pytestdeck.toml ./
