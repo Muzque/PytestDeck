@@ -19,6 +19,9 @@ const summary = ref(null)
 const markerFilter = ref('')
 const extraArgs = ref('')
 
+const runHistory = ref([])
+const selectedHistoryId = ref(null)
+
 let ws = null
 
 const availableSuites = ref([
@@ -74,7 +77,6 @@ const getExecutionNodes = () => {
   const selected = Array.from(selectedNodes.value)
   if (selected.length === 0) return []
 
-
   return selected.filter(nodeId => {
     return !selected.some(otherId => {
       if (otherId === nodeId) return false
@@ -90,6 +92,7 @@ const runTests = () => {
   logs.value = []
   exitCode.value = null
   summary.value = null
+  selectedHistoryId.value = null
   activeTab.value = 'live'
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -115,6 +118,17 @@ const runTests = () => {
       isRunning.value = false
       exitCode.value = msg.exit_code
       summary.value = msg.summary
+
+      const historyRecord = {
+        id: Date.now(),
+        timestamp: new Date().toLocaleTimeString(),
+        suite: activeSuite.value,
+        exitCode: msg.exit_code,
+        logs: [...logs.value],
+        summary: msg.summary
+      }
+      runHistory.value.unshift(historyRecord)
+      selectedHistoryId.value = historyRecord.id
     } else if (msg.type === 'error') {
       logs.value.push(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
       isRunning.value = false
@@ -125,6 +139,16 @@ const runTests = () => {
     isRunning.value = false
   }
 }
+
+const selectHistoryItem = (item) => {
+  selectedHistoryId.value = item.id
+  logs.value = [...item.logs]
+  exitCode.value = item.exitCode
+  summary.value = item.summary
+  activeTab.value = 'live'
+}
+
+
 
 const stopTests = () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -223,6 +247,13 @@ onMounted(() => {
           >
             JSON Report
           </button>
+          <button 
+            class="tab-btn" 
+            :class="{ active: activeTab === 'history' }"
+            @click="activeTab = 'history'"
+          >
+            Execution History ({{ runHistory.length }})
+          </button>
         </div>
 
         <div class="tab-content">
@@ -262,7 +293,35 @@ onMounted(() => {
               No JSON report available. Run tests to generate report content.
             </div>
           </div>
+
+          <div v-show="activeTab === 'history'" class="tab-pane history-pane">
+            <div v-if="runHistory.length > 0" class="history-list">
+              <div 
+                v-for="item in runHistory" 
+                :key="item.id" 
+                class="history-item"
+                :class="{ active: item.id === selectedHistoryId }"
+                @click="selectHistoryItem(item)"
+              >
+                <div class="history-header">
+                  <span class="history-time">{{ item.timestamp }}</span>
+                  <span class="history-suite">{{ item.suite }}</span>
+                  <span class="history-status" :class="{ pass: item.exitCode === 0, fail: item.exitCode !== 0 }">
+                    {{ item.exitCode === 0 ? 'PASSED' : 'FAILED' }}
+                  </span>
+                </div>
+                <div class="history-details" v-if="item.summary?.report?.summary">
+                  <span>Passed: {{ item.summary.report.summary.passed || 0 }}</span> |
+                  <span>Failed: {{ item.summary.report.summary.failed || 0 }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-else class="no-summary">
+              No execution history recorded yet. Run a test suite to populate history log.
+            </div>
+          </div>
         </div>
+
       </main>
     </div>
   </div>
@@ -476,4 +535,74 @@ onMounted(() => {
   max-height: calc(100vh - 120px);
   border: 1px solid var(--border-color);
 }
+
+.history-pane {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.history-item.active {
+  border-color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.history-time {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.history-suite {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.history-status {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.history-status.pass {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--accent-green);
+}
+
+.history-status.fail {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--accent-red);
+}
+
+.history-details {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
 </style>
+

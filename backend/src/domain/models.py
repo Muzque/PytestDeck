@@ -24,6 +24,8 @@ class TestNode:
         children: Child test nodes contained under this directory, file, or class.
     """
 
+    __test__ = False
+
     id: str
     name: str
     type: NodeType
@@ -56,6 +58,8 @@ class TestTree:
         root: Root TestNode directory structure containing collected test nodes.
     """
 
+    __test__ = False
+
     target_path: str
     suite: str
     total_nodes: int
@@ -73,3 +77,86 @@ class TestTree:
             "total_nodes": self.total_nodes,
             "tree": self.root.to_dict(),
         }
+
+class RunnerType(str, Enum):
+    """Enumeration of supported test runner frameworks."""
+
+    PYTEST = "pytest"
+    BEHAVE = "behave"
+
+
+@dataclass
+class BaseExecutionConfig:
+    """Base dataclass for framework-specific execution configurations.
+
+    Attributes:
+        nodes: Target node paths or nodeids to execute.
+        extra_args: Additional command line flags.
+    """
+
+    nodes: list[str] = field(default_factory=list)
+    extra_args: list[str] = field(default_factory=list)
+
+    def build_command(self) -> list[str]:
+        """Constructs the CLI command array. Overridden by subclasses.
+
+        Raises:
+            NotImplementedError: Must be implemented by concrete runner configs.
+        """
+        raise NotImplementedError
+
+
+@dataclass
+class PytestConfig(BaseExecutionConfig):
+    """Execution configuration tailored specifically for Pytest test runs.
+
+    Attributes:
+        marker: Optional pytest marker filter expression (e.g. -m smoke).
+        report_json_path: Optional output path for pytest-json-report plugin.
+    """
+
+    marker: str | None = None
+    report_json_path: str | None = None
+
+    def build_command(self) -> list[str]:
+        """Constructs the complete Pytest CLI command.
+
+        Returns:
+            list[str]: CLI command arguments array for pytest.
+        """
+        cmd = ["uv", "run", "pytest", "-v", "--color=yes"]
+        if self.report_json_path:
+            cmd.extend(["--json-report", f"--json-report-file={self.report_json_path}"])
+        if self.marker:
+            cmd.extend(["-m", self.marker])
+        if self.extra_args:
+            cmd.extend(self.extra_args)
+        if self.nodes:
+            cmd.extend(self.nodes)
+        return cmd
+
+
+@dataclass
+class BehaveConfig(BaseExecutionConfig):
+    """Execution configuration tailored specifically for Behave BDD test runs."""
+
+    def build_command(self) -> list[str]:
+        """Constructs the complete Behave CLI command.
+
+        Returns:
+            list[str]: CLI command arguments array for behave.
+        """
+        cmd = ["uv", "run", "behave", "--color=always"]
+        if self.extra_args:
+            cmd.extend(self.extra_args)
+        if self.nodes:
+            adjusted_nodes = []
+            for n in self.nodes:
+                if n == "backend/tests/acceptance":
+                    adjusted_nodes.append("backend/tests/acceptance/features")
+                else:
+                    adjusted_nodes.append(n)
+            cmd.extend(adjusted_nodes)
+        return cmd
+
+

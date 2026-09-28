@@ -61,15 +61,30 @@ const handleResize = () => {
   if (fitAddon) fitAddon.fit()
 }
 
-watch(() => props.logs.length, (newLength, oldLength) => {
+let lastLogCount = props.logs.length
+
+watch(() => props.logs, (newLogs) => {
   if (!term) return
-  if (newLength === 0) {
+
+  // If logs array was reset/cleared or replaced (e.g. starting a run or selecting history)
+  if (!newLogs || newLogs.length === 0 || newLogs.length < lastLogCount) {
     term.clear()
+    if (newLogs && newLogs.length > 0) {
+      newLogs.forEach(line => term.write(line))
+    }
+    lastLogCount = newLogs ? newLogs.length : 0
     return
   }
-  const addedLines = props.logs.slice(oldLength || 0)
-  addedLines.forEach(line => term.write(line))
-})
+
+  // If new log lines were appended during streaming
+  if (newLogs.length > lastLogCount) {
+    const appended = newLogs.slice(lastLogCount)
+    appended.forEach(line => term.write(line))
+    lastLogCount = newLogs.length
+  }
+}, { deep: true })
+
+
 </script>
 
 <template>

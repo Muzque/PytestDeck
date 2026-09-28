@@ -4,9 +4,11 @@ import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+from domain.models import BehaveConfig, PytestConfig, RunnerType
+
 
 class SubprocessRunnerService:
-    """Infrastructure service executing and streaming pytest process output via asyncio subprocesses.
+    """Infrastructure service executing and streaming test process output via asyncio subprocesses.
 
     Attributes:
         target_path: Resolved Path object pointing to target project directory.
@@ -22,44 +24,53 @@ class SubprocessRunnerService:
         self.target_path = Path(target_path).resolve()
         self.proc: asyncio.subprocess.Process | None = None
 
-    async def run_pytest_stream(
+    def detect_runner_type(self, nodes: list[str] | None = None) -> RunnerType:
+        """Determines the appropriate test runner framework type based on target nodes.
+
+        Args:
+            nodes: Optional list of test node paths or nodeids to execute.
+
+        Returns:
+            RunnerType: BEHAVE if nodes reference feature files or acceptance suite, PYTEST otherwise.
+        """
+        if nodes and any("acceptance" in n or n.endswith(".feature") for n in nodes):
+            return RunnerType.BEHAVE
+        return RunnerType.PYTEST
+
+    async def run_test_stream(
         self,
         nodes: list[str] | None = None,
         marker: str | None = None,
         extra_args: list[str] | None = None,
-        report_json_path: str | None = None
+        report_json_path: str | None = None,
+        runner_type: RunnerType | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Runs pytest in a subprocess and streams stdout lines asynchronously.
+        """Executes test runner in a subprocess and streams output lines asynchronously.
 
         Args:
             nodes: Optional list of test node paths/nodeids to execute.
             marker: Optional pytest marker filter expression (e.g. -m smoke).
-            extra_args: Optional additional command line arguments for pytest.
+            extra_args: Optional additional command line arguments.
             report_json_path: Optional temporary file path to generate JSON report.
+            runner_type: Explicit RunnerType enum (PYTEST or BEHAVE). Auto-detected if None.
 
         Yields:
             AsyncGenerator[str, None]: JSON-serialized streaming message chunks (status, stdout, finished).
         """
-        is_behave = bool(
-            nodes and any("acceptance" in n or n.endswith(".feature") for n in nodes)
-        )
-        if is_behave:
-            cmd = ["uv", "run", "behave", "--color=always"]
+        resolved_runner_type = runner_type or self.detect_runner_type(nodes)
+        if resolved_runner_type == RunnerType.BEHAVE:
+            exec_config = BehaveConfig(
+                nodes=nodes or [],
+                extra_args=extra_args or [],
+            )
         else:
-            cmd = ["uv", "run", "pytest", "-v", "--color=yes"]
-
-        if not is_behave and report_json_path:
-            cmd.extend(["--json-report", f"--json-report-file={report_json_path}"])
-
-        if marker:
-            cmd.extend(["-m", marker])
-
-        if extra_args:
-            cmd.extend(extra_args)
-
-        if nodes:
-            cmd.extend(nodes)
-
+            exec_config = PytestConfig(
+                nodes=nodes or [],
+                marker=marker,
+                extra_args=extra_args or [],
+                report_json_path=report_json_path,
+            )
+        cmd = exec_config.build_command()
 
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"

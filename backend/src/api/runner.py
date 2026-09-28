@@ -37,12 +37,13 @@ async def websocket_run(websocket: WebSocket):
                 report_json_path = tmp.name
 
             try:
-                async for chunk in runner.run_pytest_stream(
+                async for chunk in runner.run_test_stream(
                     nodes=nodes,
                     marker=marker,
                     extra_args=extra_args,
                     report_json_path=report_json_path,
                 ):
+
                     await websocket.send_text(chunk)
             finally:
                 if os.path.exists(report_json_path):
