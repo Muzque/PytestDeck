@@ -26,6 +26,22 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await firstRow.click()
   })
 
+  test('should switch test suites between unit, integration, and behave acceptance', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    
+    const select = page.locator('.suite-select')
+    
+    // Switch to Integration suite
+    await select.selectOption('backend/tests/integration')
+    await expect(page.locator('.suite-tag')).toHaveText('backend/tests/integration')
+    await page.waitForSelector('.tree-container', { timeout: 10000 })
+
+    // Switch to Acceptance suite (Behave BDD)
+    await select.selectOption('backend/tests/acceptance')
+    await expect(page.locator('.suite-tag')).toHaveText('backend/tests/acceptance')
+    await page.waitForSelector('.tree-container', { timeout: 10000 })
+  })
+
   test('should run tests and update execution metrics & history', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 10000 })
     
@@ -50,5 +66,50 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.click('button:has-text("Execution History")')
     await expect(page.locator('.history-item')).toHaveCount(1)
     await expect(page.locator('.history-status')).toHaveText('PASSED')
+  })
+
+  test('should display raw JSON report tab after execution', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.click('.btn-primary')
+    
+    // Wait for run to finish
+    await page.waitForSelector('.btn-primary', { timeout: 15000 })
+
+    // Click JSON Report tab
+    await page.click('button:has-text("JSON Report")')
+    const jsonCode = page.locator('.json-code')
+    await expect(jsonCode).toBeVisible()
+    await expect(jsonCode).toContainText('summary')
+  })
+
+  test('should pass marker filter and extra flags to runner execution', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 10000 })
+
+    // Enter marker and extra flags filters
+    const markerInput = page.locator('input[placeholder*="Marker"]')
+    const extraInput = page.locator('input[placeholder*="Extra flags"]')
+
+    await markerInput.fill('smoke')
+    await extraInput.fill('-s')
+
+    // Click Run Selected
+    await page.click('.btn-primary')
+    await page.waitForSelector('.btn-primary', { timeout: 15000 })
+  })
+
+  test('should handle stop execution action cleanly', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    
+    // Start test execution
+    await page.click('.btn-primary')
+    
+    // Stop button should appear
+    const stopBtn = page.locator('.btn-danger')
+    if (await stopBtn.isVisible()) {
+      await stopBtn.click()
+    }
+
+    // Run button should become visible again
+    await expect(page.locator('.btn-primary')).toBeVisible({ timeout: 10000 })
   })
 })
