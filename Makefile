@@ -1,4 +1,4 @@
-.PHONY: help unit-test integration-test acceptance-test lint build-frontend run-dev deploy
+.PHONY: help unit-test integration-test acceptance-test e2e-test lint build-frontend run-dev deploy
 
 IMAGE_NAME ?= pytestdeck
 IMAGE_TAG ?= latest
@@ -24,6 +24,10 @@ integration-test: ## Run integration tests
 acceptance-test: ## Run acceptance / BDD tests (e.g. make acceptance-test FEATURES="tests/acceptance/features/self_test.feature")
 	@echo "Running Acceptance Tests..."
 	cd backend && PYTHONPATH=src uv run behave $(if $(FEATURES),$(FEATURES),tests/acceptance/features)
+
+e2e-test: ## Run frontend Playwright E2E tests
+	@echo "Running Frontend E2E Tests..."
+	cd frontend && npm run test:e2e
 
 build-frontend: ## Build Vue 3 frontend SPA
 	@echo "Building Frontend..."
