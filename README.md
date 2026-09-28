@@ -120,10 +120,16 @@ make deploy
 
 ## 🐳 Docker Deployment
 
-Build the container image using multi-stage cached layers and start the server on port `9388`:
+Build and launch the containerized application in detached mode (`-d`) using Docker Compose:
 
 ```bash
 make deploy
+```
+
+Or directly via `docker compose`:
+
+```bash
+docker compose up -d --build
 ```
 
 ---

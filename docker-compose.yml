@@ -1,0 +1,12 @@
+name: pytestdeck
+
+services:
+  pytestdeck:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pytestdeck:latest
+    container_name: pytestdeck
+    ports:
+      - "9388:9388"
+    restart: unless-stopped
