@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -29,14 +29,11 @@ const onToggleClick = (e) => {
   toggleOpen()
 }
 
-const onCheckboxClick = (e) => {
-  e.stopPropagation()
-}
-
 const onChildToggleSelect = (targetNode) => {
   emit('toggle-select', targetNode)
 }
 </script>
+
 
 
 <template>

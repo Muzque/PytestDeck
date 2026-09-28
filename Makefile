@@ -8,8 +8,10 @@ help: ## Display available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 lint: ## Run linter and code checks
-	@echo "Running Linting & Formatting checks..."
-	cd backend && PYTHONPATH=src:src/api uv run ruff check src tests || true
+	@echo "Running Backend & Frontend Linting checks..."
+	cd backend && PYTHONPATH=src:src/api uv run ruff check src tests
+	cd frontend && npm run lint
+
 
 unit-test: ## Run unit tests
 	@echo "Running Unit Tests..."

@@ -1,7 +1,8 @@
 <script setup>
-import { ref, watch, computed, onMounted, reactive } from 'vue'
+import { ref, onMounted } from 'vue'
 import TreeNode from './components/TreeNode.vue'
 import TerminalView from './components/TerminalView.vue'
+
 
 const targetPath = ref('/Users/xuandi/repo/PytestDeck')
 const activeSuite = ref('backend/tests/unit')
