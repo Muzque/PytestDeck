@@ -87,7 +87,7 @@ class PytestDiscoveryService:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            await proc.communicate()
+            stdout_bytes, stderr_bytes = await proc.communicate()
 
             collectors = []
             if os.path.exists(tmp_report):
@@ -97,6 +97,11 @@ class PytestDiscoveryService:
                         collectors = report_data.get("collectors", [])
                 except Exception:
                     pass
+
+            if not collectors and proc.returncode not in (0, 5):
+                err_msg = stderr_bytes.decode("utf-8", errors="replace").strip() or stdout_bytes.decode("utf-8", errors="replace").strip()
+                if err_msg:
+                    raise ValueError(f"Pytest test collection failed:\n{err_msg}")
 
             total_items = sum(
                 1 for c in collectors for r in c.get("result", [])

@@ -105,7 +105,8 @@ async def test_subprocess_runner_service_abort_running_process(tmp_path):
         "sleep", "5",
         cwd=str(tmp_path),
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        stderr=asyncio.subprocess.PIPE,
+        start_new_session=True
     )
     runner.proc = proc
     assert proc.returncode is None

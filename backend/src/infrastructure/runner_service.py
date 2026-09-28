@@ -92,7 +92,8 @@ class SubprocessRunnerService:
             cwd=str(self.target_path),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            env=env
+            env=env,
+            start_new_session=True,
         )
 
         yield json.dumps({"type": "status", "data": f"Started process: {' '.join(cmd)}\r\n"})
@@ -121,9 +122,29 @@ class SubprocessRunnerService:
         """Aborts the currently running subprocess execution cleanly."""
         if self.proc and self.proc.returncode is None:
             try:
-                self.proc.terminate()
+                pgid = None
+                if hasattr(os, "getpgid"):
+                    try:
+                        child_pgid = os.getpgid(self.proc.pid)
+                        current_pgid = os.getpgid(0)
+                        if child_pgid != current_pgid:
+                            pgid = child_pgid
+                    except (ProcessLookupError, OSError):
+                        pass
+
+                if pgid and hasattr(os, "killpg"):
+                    import signal
+                    os.killpg(pgid, signal.SIGTERM)
+                else:
+                    self.proc.terminate()
+
                 await asyncio.sleep(0.5)
                 if self.proc.returncode is None:
-                    self.proc.kill()
-            except ProcessLookupError:
+                    if pgid and hasattr(os, "killpg"):
+                        import signal
+                        os.killpg(pgid, signal.SIGKILL)
+                    else:
+                        self.proc.kill()
+            except (ProcessLookupError, OSError):
                 pass
+

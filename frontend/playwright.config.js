@@ -18,4 +18,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
+  webServer: {
+    command: 'cd ../backend && PYTHONPATH=src uv run uvicorn app:app --port 9388',
+    url: 'http://127.0.0.1:9388',
+    reuseExistingServer: true,
+    timeout: 30000,
+  },
 })

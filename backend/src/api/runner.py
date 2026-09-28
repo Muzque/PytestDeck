@@ -59,4 +59,10 @@ async def websocket_run(websocket: WebSocket):
         if runner:
             await runner.abort()
     except Exception as e:
-        await websocket.send_json({"type": "error", "message": str(e)})
+        if runner:
+            await runner.abort()
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+

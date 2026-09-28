@@ -26,6 +26,15 @@ export function useTestRunner() {
     { label: 'Acceptance (Behave)', path: 'backend/tests/acceptance' }
   ])
 
+  const MAX_LOG_LINES = 5000
+
+  const appendLog = (line) => {
+    logs.value.push(line)
+    if (logs.value.length > MAX_LOG_LINES) {
+      logs.value = logs.value.slice(-MAX_LOG_LINES)
+    }
+  }
+
   const discoverTests = async () => {
     isDiscovering.value = true
     selectedNodes.value = new Set()
@@ -38,10 +47,15 @@ export function useTestRunner() {
           suite_rel_path: activeSuite.value
         })
       })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.detail || `Discovery failed with status ${res.status}`)
+      }
       const data = await res.json()
       testTree.value = data.tree
     } catch (err) {
       console.error(err)
+      testTree.value = null
     } finally {
       isDiscovering.value = false
     }
@@ -99,34 +113,44 @@ export function useTestRunner() {
         target_path: targetPath.value,
         nodes: nodesToRun,
         marker: markerFilter.value || null,
-        extra_args: extraArgs.value ? extraArgs.value.split(' ') : []
+        extra_args: extraArgs.value ? extraArgs.value.trim().split(/\s+/) : []
       }
       ws.send(JSON.stringify(payload))
     }
 
     ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data)
-      if (msg.type === 'stdout' || msg.type === 'status') {
-        logs.value.push(msg.data)
-      } else if (msg.type === 'finished') {
-        isRunning.value = false
-        exitCode.value = msg.exit_code
-        summary.value = msg.summary
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'stdout' || msg.type === 'status') {
+          appendLog(msg.data)
+        } else if (msg.type === 'finished') {
+          isRunning.value = false
+          exitCode.value = msg.exit_code
+          summary.value = msg.summary
 
-        const historyRecord = {
-          id: Date.now(),
-          timestamp: new Date().toLocaleTimeString(),
-          suite: activeSuite.value,
-          exitCode: msg.exit_code,
-          logs: [...logs.value],
-          summary: msg.summary
+          const historyRecord = {
+            id: Date.now(),
+            timestamp: new Date().toLocaleTimeString(),
+            suite: activeSuite.value,
+            exitCode: msg.exit_code,
+            logs: [...logs.value],
+            summary: msg.summary
+          }
+          runHistory.value.unshift(historyRecord)
+          selectedHistoryId.value = historyRecord.id
+        } else if (msg.type === 'error') {
+          appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
+          isRunning.value = false
         }
-        runHistory.value.unshift(historyRecord)
-        selectedHistoryId.value = historyRecord.id
-      } else if (msg.type === 'error') {
-        logs.value.push(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
-        isRunning.value = false
+      } catch {
+        appendLog(event.data)
       }
+    }
+
+    ws.onerror = (err) => {
+      console.error('WebSocket connection error:', err)
+      appendLog('\x1b[1;31mWebSocket Connection Error\x1b[0m\r\n')
+      isRunning.value = false
     }
 
     ws.onclose = () => {
