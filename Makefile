@@ -37,6 +37,8 @@ run-dev: ## Run development server locally
 	@echo "Starting PytestDeck Dev Server..."
 	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port 9388
 
-deploy: ## Build Docker container for deployment
+deploy: ## Build and run Docker container for deployment
 	@echo "Building Docker container for deployment..."
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	@echo "Starting Docker container on http://127.0.0.1:9388 ..."
+	docker run --rm -p 9388:9388 $(IMAGE_NAME):$(IMAGE_TAG)

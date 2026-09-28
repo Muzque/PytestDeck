@@ -112,7 +112,7 @@ make lint
 # Build production frontend bundle
 make build-frontend
 
-# Build Docker container image
+# Build and run Docker container image
 make deploy
 ```
 
@@ -120,16 +120,10 @@ make deploy
 
 ## 🐳 Docker Deployment
 
-Build the container image using multi-stage cached layers:
+Build the container image using multi-stage cached layers and start the server on port `9388`:
 
 ```bash
 make deploy
-```
-
-Run the containerized server on port `9388`:
-
-```bash
-docker run -p 9388:9388 pytestdeck:latest
 ```
 
 ---
