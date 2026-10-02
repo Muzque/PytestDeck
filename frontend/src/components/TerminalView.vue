@@ -3,39 +3,29 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
+import { useTheme, TERMINAL_THEMES } from '../composables/useTheme'
 
 const props = defineProps({
   logs: { type: Array, default: () => [] }
 })
 
+const { currentTerminalTheme, terminalThemes } = useTheme()
+
 const terminalContainer = ref(null)
 let term = null
 let fitAddon = null
 
+const applyTerminalTheme = (themeId) => {
+  if (!term) return
+  const themeObj = TERMINAL_THEMES[themeId] || TERMINAL_THEMES['apple-dark']
+  term.options.theme = themeObj.options
+}
+
 onMounted(() => {
+  const initialTheme = TERMINAL_THEMES[currentTerminalTheme.value] || TERMINAL_THEMES['apple-dark']
+
   term = new Terminal({
-    theme: {
-      background: '#090d16',
-      foreground: '#e2e8f0',
-      cursor: '#38bdf8',
-      selectionBackground: 'rgba(56, 189, 248, 0.3)',
-      black: '#1e222a',
-      red: '#f87171',
-      green: '#4ade80',
-      yellow: '#facc15',
-      blue: '#60a5fa',
-      magenta: '#c084fc',
-      cyan: '#38bdf8',
-      white: '#f1f5f9',
-      brightBlack: '#475569',
-      brightRed: '#ef4444',
-      brightGreen: '#22c55e',
-      brightYellow: '#eab308',
-      brightBlue: '#3b82f6',
-      brightMagenta: '#a855f7',
-      brightCyan: '#06b6d4',
-      brightWhite: '#ffffff'
-    },
+    theme: initialTheme.options,
     fontSize: 13,
     fontFamily: 'Fira Code, Menlo, Monaco, "Courier New", monospace',
     convertEol: true,
@@ -84,11 +74,28 @@ watch(() => props.logs, (newLogs) => {
   }
 }, { deep: true })
 
-
+watch(currentTerminalTheme, (newThemeId) => {
+  applyTerminalTheme(newThemeId)
+})
 </script>
 
 <template>
-  <div class="terminal-wrapper">
+  <div class="terminal-wrapper" :data-term-theme="currentTerminalTheme">
+    <div class="terminal-toolbar">
+      <div class="terminal-dots">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="terminal-title">Terminal Output</span>
+      </div>
+      <div class="terminal-actions">
+        <select v-model="currentTerminalTheme" class="term-theme-select" title="Terminal Color Theme">
+          <option v-for="tt in terminalThemes" :key="tt.id" :value="tt.id">
+            {{ tt.label }}
+          </option>
+        </select>
+      </div>
+    </div>
     <div ref="terminalContainer" class="terminal-container"></div>
   </div>
 </template>
@@ -97,13 +104,67 @@ watch(() => props.logs, (newLogs) => {
 .terminal-wrapper {
   width: 100%;
   height: 100%;
-  background: #090d16;
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border-radius: var(--glass-border-radius);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--glass-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.terminal-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot-red { background: #ff5f56; }
+.dot-yellow { background: #ffbd2e; }
+.dot-green { background: #27c93f; }
+
+.terminal-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+.term-theme-select {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 4px 10px;
   border-radius: 6px;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.term-theme-select:hover {
+  border-color: var(--border-hover);
+}
+
+.terminal-container {
+  flex: 1;
+  width: 100%;
   padding: 8px;
   box-sizing: border-box;
-}
-.terminal-container {
-  width: 100%;
-  height: 100%;
 }
 </style>
