@@ -275,13 +275,31 @@ select {
 }
 
 .deck-sidebar {
-  width: 360px;
+  position: relative;
+  min-width: 240px;
+  max-width: 800px;
   background: var(--bg-secondary);
   backdrop-filter: var(--glass-backdrop);
   -webkit-backdrop-filter: var(--glass-backdrop);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+  transition: background 0.15s ease;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.is-active {
+  background: rgba(56, 189, 248, 0.4);
 }
 
 .sidebar-header {
@@ -326,6 +344,7 @@ select {
 .tree-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 12px;
 }
 

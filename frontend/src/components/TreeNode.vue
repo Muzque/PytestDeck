@@ -89,9 +89,10 @@ const onChildToggleSelect = (targetNode) => {
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s ease;
+  min-width: max-content;
 }
 
 .node-row:hover {
@@ -122,6 +123,7 @@ const onChildToggleSelect = (targetNode) => {
   background: var(--bg-input);
   color: var(--text-muted);
   border: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 .type-badge.directory, .type-badge.dir {
   background: rgba(56, 189, 248, 0.15);
@@ -146,8 +148,6 @@ const onChildToggleSelect = (targetNode) => {
 .node-name {
   color: var(--text-main);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .node-children {
   padding-left: 18px;
