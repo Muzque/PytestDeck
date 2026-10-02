@@ -17,120 +17,63 @@ Lightweight cross-project Python test control deck built with FastAPI, Vue 3 SPA
 
 ---
 
-## 🏗️ Repository Architecture
-
-```text
-PytestDeck/
-├── backend/
-│   ├── src/
-│   │   ├── api/             # Modular FastAPI endpoints (health, config, discover, runner)
-│   │   ├── application/     # Application use cases (DiscoverTestsUseCase)
-│   │   ├── domain/          # DDD entities, models, and domain tree builder
-│   │   ├── infrastructure/  # Pytest process runner & discovery integration
-│   │   └── app.py           # FastAPI entry point serving SPA
-│   ├── tests/
-│   │   ├── unit/            # 1-to-1 unit tests mirroring src/
-│   │   ├── integration/api/ # 1-to-1 API integration test modules
-│   │   └── acceptance/      # Behave feature scenarios
-│   └── pyproject.toml
-├── frontend/                # Vue 3 SPA with xterm.js terminal integration
-├── Dockerfile               # Multi-stage optimized build pipeline
-├── Makefile                 # Task automation targets
-└── pytestdeck.toml          # Target repository suite configuration
-```
-
----
-
 ## 🚀 Quick Start
 
-### 1. Local Development Mode
+### 1. Deploy Container (Recommended)
 
-Start the FastAPI dev server (with built SPA assets):
+To launch PytestDeck as a containerized service:
+
+```bash
+make deploy
+```
+
+*(This runs `docker compose up -d --build` in background mode)*.
+
+Once started, open **`http://127.0.0.1:9388`** in your browser.
+
+### 2. Local Run Mode
+
+If you are running directly on your host machine without Docker:
 
 ```bash
 make run-dev
 ```
+
 Open **`http://127.0.0.1:9388`** in your browser.
-
-### 2. Frontend Development
-
-To run the Vue 3 Vite dev server with hot module replacement:
-
-```bash
-cd frontend
-npm run dev
-```
 
 ---
 
-## 🎯 Tutorial: Changing Target Repositories
+## 🎯 How to Use PytestDeck
 
 PytestDeck allows you to inspect and run tests across any target Python repository.
 
-### Option A: From the UI (Interactive)
+### Interactive Usage (UI)
 1. Open **`http://127.0.0.1:9388`** in your browser.
 2. Enter the **absolute path** of your target Python repository into the top navigation input field (e.g. `/Users/username/projects/my-python-app`).
 3. Select the test suite directory (e.g. `tests/unit` or `tests/integration`).
 4. Click **Refresh Tree** to scan and populate the interactive test explorer hierarchy.
+5. Select individual tests or folders and click **▶ Run Selected** to execute and stream test outputs in real time.
 
-### Option B: Pre-configuring `pytestdeck.toml`
-Create or update `pytestdeck.toml` at the target repo root to define suite structures:
+### Default Environment Configuration (`.env`)
+You can configure default target repository paths and test suite directories using a `.env` file (see `.env.example`):
 
-```toml
-[pytestdeck]
-unit_dir = "tests/unit"
-integration_dir = "tests/integration"
+```bash
+# Path to target Python repository (absolute path or relative path)
+TARGET_REPO=.
 
-[pytestdeck.suites.unit]
-runner = "pytest"
-ini_file = "tests/unit/pytest.ini"
+# Relative directory paths for test suites in target repository
+UNIT_DIR=backend/tests/unit
+INTEGRATION_DIR=backend/tests/integration
+ACCEPTANCE_DIR=backend/tests/acceptance
 
-[pytestdeck.suites.integration]
-runner = "pytest"
-ini_file = "tests/integration/pytest.ini"
+PORT=9388
 ```
 
 ---
 
-## 🧪 Running Automation Commands
+## 🛠️ Contributing & Development
 
-All primary automation commands are managed via `Makefile`:
-
-```bash
-# Run unit tests
-make unit-test
-
-# Run API integration tests
-make integration-test
-
-# Run BDD acceptance tests
-make acceptance-test
-
-# Run lint checks
-make lint
-
-# Build production frontend bundle
-make build-frontend
-
-# Build and run Docker container image
-make deploy
-```
-
----
-
-## 🐳 Docker Deployment
-
-Build and launch the containerized application in detached mode (`-d`) using Docker Compose:
-
-```bash
-make deploy
-```
-
-Or directly via `docker compose`:
-
-```bash
-docker compose up -d --build
-```
+Interested in modifying PytestDeck or contributing? Check out our [Development Guide](DEVELOPMENT.md) for repository architecture, local setup, unit/integration/E2E test commands, and linting rules.
 
 ---
 
