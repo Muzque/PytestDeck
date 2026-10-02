@@ -5,6 +5,7 @@ import TerminalView from './components/TerminalView.vue'
 import MetricsSummary from './components/MetricsSummary.vue'
 import RunHistory from './components/RunHistory.vue'
 import { useTestRunner } from './composables/useTestRunner'
+import { useTooltip } from './composables/useTooltip'
 
 const {
   targetPath,
@@ -28,6 +29,8 @@ const {
   stopTests,
   selectHistoryItem
 } = useTestRunner()
+
+const { activeTooltip } = useTooltip()
 </script>
 
 <template>
@@ -120,5 +123,24 @@ const {
         </div>
       </main>
     </div>
+
+    <!-- Floating Glass Tooltip -->
+    <Teleport to="body">
+      <div 
+        v-if="activeTooltip.visible" 
+        class="custom-glass-tooltip"
+        :style="{ top: activeTooltip.y + 'px', left: activeTooltip.x + 'px' }"
+      >
+        <div class="tooltip-header">
+          <span class="tooltip-badge" :class="activeTooltip.type">
+            {{ (activeTooltip.type || 'NODE').substring(0, 3).toUpperCase() }}
+          </span>
+          <span class="tooltip-name">{{ activeTooltip.name }}</span>
+        </div>
+        <div v-if="activeTooltip.id && activeTooltip.id !== activeTooltip.name" class="tooltip-path">
+          {{ activeTooltip.id }}
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

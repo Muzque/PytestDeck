@@ -17,14 +17,14 @@ const emit = defineEmits([
 ])
 
 const SIDEBAR_WIDTH_KEY = 'pytestdeck_sidebar_width'
-const sidebarWidth = ref(380)
+const sidebarWidth = ref(480)
 const isResizing = ref(false)
 
 onMounted(() => {
   const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY)
   if (savedWidth) {
     const parsed = parseInt(savedWidth, 10)
-    if (parsed >= 240 && parsed <= 800) {
+    if (parsed >= 240 && parsed <= 1400) {
       sidebarWidth.value = parsed
     }
   }
@@ -40,7 +40,8 @@ const startResizing = () => {
 
 const handleMouseMove = (e) => {
   if (!isResizing.value) return
-  const newWidth = Math.min(Math.max(e.clientX, 240), 800)
+  const maxAllowed = Math.min(1400, window.innerWidth - 250)
+  const newWidth = Math.min(Math.max(e.clientX, 240), maxAllowed)
   sidebarWidth.value = newWidth
 }
 
@@ -96,7 +97,7 @@ const stopResizing = () => {
       class="sidebar-resizer" 
       :class="{ 'is-active': isResizing }"
       @mousedown.prevent="startResizing"
-      title="Drag to resize explorer sidebar"
+      title="Drag to resize explorer sidebar (up to 1400px)"
     ></div>
   </aside>
 </template>

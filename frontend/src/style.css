@@ -530,3 +530,92 @@ select {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+/* Custom Floating Tooltip (Solid Opaque High Contrast) */
+.custom-glass-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: #0f172a;
+  border: 1px solid #334155;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.85);
+  border-radius: 8px;
+  padding: 10px 14px;
+  pointer-events: none;
+  max-width: 600px;
+  animation: tooltipFade 0.1s ease-out;
+}
+
+[data-theme="apple-glass-light"] .custom-glass-tooltip {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes tooltipFade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tooltip-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #f8fafc;
+  word-break: break-all;
+}
+
+[data-theme="apple-glass-light"] .tooltip-name {
+  color: #0f172a;
+}
+
+.tooltip-path {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  font-family: 'Fira Code', Menlo, Monaco, monospace;
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+[data-theme="apple-glass-light"] .tooltip-path {
+  color: #475569;
+}
+
+.tooltip-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.tooltip-badge.directory, .tooltip-badge.dir {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.tooltip-badge.file, .tooltip-badge.fil {
+  background: rgba(52, 211, 153, 0.25);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.5);
+}
+
+.tooltip-badge.class, .tooltip-badge.cls {
+  background: rgba(168, 85, 247, 0.25);
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.tooltip-badge.function, .tooltip-badge.fun {
+  background: rgba(251, 191, 36, 0.25);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.5);
+}

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useTooltip } from '../composables/useTooltip'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -7,6 +8,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['toggle-select'])
+
+const { showTooltip, hideTooltip } = useTooltip()
 
 const isOpen = ref(true)
 
@@ -34,11 +37,15 @@ const onChildToggleSelect = (targetNode) => {
 }
 </script>
 
-
-
 <template>
   <div class="tree-node">
-    <div class="node-row" :class="{ 'is-selected': isChecked }" @click="onRowClick">
+    <div 
+      class="node-row" 
+      :class="{ 'is-selected': isChecked }" 
+      @click="onRowClick"
+      @mouseenter="showTooltip(node, $event)"
+      @mouseleave="hideTooltip"
+    >
       <span 
         class="toggle-icon" 
         @click="onToggleClick"
@@ -56,15 +63,14 @@ const onChildToggleSelect = (targetNode) => {
         class="node-checkbox"
       />
 
-
-
       <span class="type-badge" :class="node.type">
         {{ node.type.substring(0, 3).toUpperCase() }}
       </span>
 
-      <span class="node-name" :title="node.id">{{ node.name }}</span>
+      <span class="node-name">
+        {{ node.name }}
+      </span>
     </div>
-
 
     <div v-if="isOpen && node.children && node.children.length > 0" class="node-children">
       <TreeNode 
@@ -75,7 +81,6 @@ const onChildToggleSelect = (targetNode) => {
         @toggle-select="onChildToggleSelect"
       />
     </div>
-
   </div>
 </template>
 
@@ -96,10 +101,10 @@ const onChildToggleSelect = (targetNode) => {
 }
 
 .node-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.08);
 }
 .node-row.is-selected {
-  background: rgba(56, 189, 248, 0.12);
+  background: rgba(56, 189, 248, 0.15);
 }
 .toggle-icon {
   font-size: 0.65rem;
