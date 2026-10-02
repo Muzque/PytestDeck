@@ -65,3 +65,13 @@ async def test_pytest_discovery_service_invalid_target_path():
     service = PytestDiscoveryService()
     with pytest.raises(ValueError, match="Invalid target path"):
         await service.collect_raw("/nonexistent/path/for/testing")
+
+
+@pytest.mark.anyio
+async def test_pytest_discovery_service_collection_error(tmp_path):
+    """Verifies ValueError when pytest collection fails with non-zero return code."""
+    service = PytestDiscoveryService()
+    # Passing non-existent suite directory with custom ini failure
+    (tmp_path / "pytest.ini").write_text("[pytest]\naddopts = --invalid-option-flag-xyz\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Pytest test collection failed"):
+        await service.collect_raw(str(tmp_path), suite_rel_path="tests/unit")

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app import app
@@ -5,11 +7,16 @@ from app import app
 client = TestClient(app)
 
 
+def get_repo_root() -> str:
+    cwd = Path.cwd().resolve()
+    return str(cwd.parent if cwd.name == "backend" else cwd)
+
+
 def test_ws_run_endpoint():
     with client.websocket_connect("/ws/run") as websocket:
         websocket.send_json({
             "action": "START",
-            "target_path": "/Users/xuandi/repo/PytestDeck",
+            "target_path": get_repo_root(),
             "nodes": ["backend/tests/unit/domain/test_models.py"]
         })
         msg = websocket.receive_json()
@@ -32,6 +39,19 @@ def test_ws_run_stop_action():
     """Verifies STOP action behavior in websocket handler."""
     with client.websocket_connect("/ws/run") as websocket:
         websocket.send_json({"action": "STOP"})
+
+
+def test_ws_run_unsafe_node_path():
+    """Verifies error message when unsafe path traversal node is supplied."""
+    with client.websocket_connect("/ws/run") as websocket:
+        websocket.send_json({
+            "action": "START",
+            "target_path": get_repo_root(),
+            "nodes": ["../../etc/passwd"]
+        })
+        msg = websocket.receive_json()
+        assert msg.get("type") == "error"
+        assert "Unsafe node path traversal" in msg.get("message", "")
 
 
 def test_ws_run_invalid_json():
