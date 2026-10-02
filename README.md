@@ -62,7 +62,7 @@ You can set default target repository paths and test suite directories using a `
 
 ### Sample Case Scenario
 
-Suppose you have a target project located on your system at `/Users/alex/projects/inventory-service`, with tests organized in `tests/unit` and `tests/integration`.
+Suppose you have a target project located on your system at `/Users/alex/projects/inventory-service`, with tests organized in `tests/unit`, `tests/integration`, and `tests/acceptance`.
 
 Create a `.env` file with the following configuration:
 
@@ -79,7 +79,31 @@ ACCEPTANCE_DIR=tests/acceptance
 PORT=9388
 ```
 
-When you start PytestDeck (`make deploy` or `make run-dev`), the dashboard will automatically load `/Users/alex/projects/inventory-service` as the default active target and populate its suite dropdown options.
+### Target Repository Directory Structure
+
+For the `.env` settings above, your target Python repository layout looks like this:
+
+```text
+inventory-service/                    # TARGET_REPO=/Users/alex/projects/inventory-service
+├── src/                              # Application source code
+│   └── inventory/
+│       ├── __init__.py
+│       └── service.py
+├── tests/
+│   ├── unit/                         # UNIT_DIR=tests/unit
+│   │   ├── pytest.ini                # Suite-level pytest configuration
+│   │   └── test_service.py           # Unit test module
+│   ├── integration/                  # INTEGRATION_DIR=tests/integration
+│   │   ├── pytest.ini                # Suite-level pytest configuration
+│   │   └── test_api.py               # Integration test module
+│   └── acceptance/                   # ACCEPTANCE_DIR=tests/acceptance
+│       └── features/                 # Behave BDD feature files
+│           └── inventory.feature
+├── pytest.ini                        # Optional repository root pytest configuration
+└── pyproject.toml
+```
+
+When you start PytestDeck (`make deploy` or `make run-dev`), the dashboard automatically targets `/Users/alex/projects/inventory-service` and populates the test suites matching your structure.
 
 ---
 
