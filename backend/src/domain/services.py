@@ -28,7 +28,24 @@ def resolve_target_path(target_path: str) -> Path:
     if app_root.exists() and app_root.is_dir():
         return app_root
 
-    raise ValueError("Invalid target path: empty")
+def is_safe_subpath(base_path: Path, sub_path: str) -> bool:
+    """Verifies that sub_path stays strictly within base_path directory boundary to prevent path traversal.
+
+    Args:
+        base_path: Target root directory path.
+        sub_path: Relative node or suite path to validate.
+
+    Returns:
+        bool: True if sub_path is within base_path boundary, False otherwise.
+    """
+    if not sub_path:
+        return True
+    try:
+        file_part = sub_path.split("::")[0]
+        resolved_sub = (base_path / file_part).resolve()
+        return resolved_sub == base_path or base_path in resolved_sub.parents
+    except (ValueError, OSError):
+        return False
 
 
 

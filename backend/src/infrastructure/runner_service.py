@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from domain.models import BehaveConfig, PytestConfig, RunnerType
+from domain.services import is_safe_subpath
 
 
 class SubprocessRunnerService:
@@ -57,6 +58,11 @@ class SubprocessRunnerService:
         Yields:
             AsyncGenerator[str, None]: JSON-serialized streaming message chunks (status, stdout, finished).
         """
+        if nodes:
+            for node in nodes:
+                if not is_safe_subpath(self.target_path, node):
+                    raise ValueError(f"Unsafe node path traversal detected: {node}")
+
         resolved_runner_type = runner_type or self.detect_runner_type(nodes)
         if resolved_runner_type == RunnerType.BEHAVE:
             exec_config = BehaveConfig(

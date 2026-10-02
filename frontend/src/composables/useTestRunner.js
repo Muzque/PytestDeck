@@ -103,59 +103,76 @@ export function useTestRunner() {
     selectedHistoryId.value = null
     activeTab.value = 'live'
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws/run`)
+    let retries = 0
+    const maxRetries = 3
 
-    ws.onopen = () => {
-      const nodesToRun = getExecutionNodes()
-      const payload = {
-        action: 'START',
-        target_path: targetPath.value,
-        nodes: nodesToRun,
-        marker: markerFilter.value || null,
-        extra_args: extraArgs.value ? extraArgs.value.trim().split(/\s+/) : []
+    const connectWebSocket = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws/run`)
+
+      ws.onopen = () => {
+        retries = 0
+        const nodesToRun = getExecutionNodes()
+        const payload = {
+          action: 'START',
+          target_path: targetPath.value,
+          nodes: nodesToRun,
+          marker: markerFilter.value || null,
+          extra_args: extraArgs.value ? extraArgs.value.trim().split(/\s+/) : []
+        }
+        ws.send(JSON.stringify(payload))
       }
-      ws.send(JSON.stringify(payload))
-    }
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data)
-        if (msg.type === 'stdout' || msg.type === 'status') {
-          appendLog(msg.data)
-        } else if (msg.type === 'finished') {
-          isRunning.value = false
-          exitCode.value = msg.exit_code
-          summary.value = msg.summary
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.type === 'stdout' || msg.type === 'status') {
+            appendLog(msg.data)
+          } else if (msg.type === 'finished') {
+            isRunning.value = false
+            exitCode.value = msg.exit_code
+            summary.value = msg.summary
 
-          const historyRecord = {
-            id: Date.now(),
-            timestamp: new Date().toLocaleTimeString(),
-            suite: activeSuite.value,
-            exitCode: msg.exit_code,
-            logs: [...logs.value],
-            summary: msg.summary
+            const historyRecord = {
+              id: Date.now(),
+              timestamp: new Date().toLocaleTimeString(),
+              suite: activeSuite.value,
+              exitCode: msg.exit_code,
+              logs: [...logs.value],
+              summary: msg.summary
+            }
+            runHistory.value.unshift(historyRecord)
+            selectedHistoryId.value = historyRecord.id
+          } else if (msg.type === 'error') {
+            appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
+            isRunning.value = false
           }
-          runHistory.value.unshift(historyRecord)
-          selectedHistoryId.value = historyRecord.id
-        } else if (msg.type === 'error') {
-          appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
+        } catch {
+          appendLog(event.data)
+        }
+      }
+
+      ws.onerror = (err) => {
+        console.error('WebSocket connection error:', err)
+        if (retries < maxRetries && isRunning.value) {
+          retries++
+          const delay = Math.pow(2, retries) * 500
+          appendLog(`\x1b[1;33mWebSocket connection error. Retrying (${retries}/${maxRetries}) in ${delay}ms...\x1b[0m\r\n`)
+          setTimeout(connectWebSocket, delay)
+        } else {
+          appendLog('\x1b[1;31mWebSocket Connection Error: Max retries reached.\x1b[0m\r\n')
           isRunning.value = false
         }
-      } catch {
-        appendLog(event.data)
+      }
+
+      ws.onclose = () => {
+        if (retries === 0 || retries >= maxRetries) {
+          isRunning.value = false
+        }
       }
     }
 
-    ws.onerror = (err) => {
-      console.error('WebSocket connection error:', err)
-      appendLog('\x1b[1;31mWebSocket Connection Error\x1b[0m\r\n')
-      isRunning.value = false
-    }
-
-    ws.onclose = () => {
-      isRunning.value = false
-    }
+    connectWebSocket()
   }
 
   const stopTests = () => {
