@@ -20,7 +20,7 @@ const emit = defineEmits([
 <template>
   <header class="deck-header">
     <div class="brand">
-      <span class="logo">⚡</span>
+      <img src="/favicon.svg" alt="PytestDeck Logo" class="brand-logo-img" />
       <h1>PytestDeck</h1>
     </div>
 

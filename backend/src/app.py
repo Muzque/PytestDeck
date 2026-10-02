@@ -35,4 +35,7 @@ if frontend_dist.exists():
     async def serve_spa(full_path: str):
         if full_path.startswith(("api", "ws")):
             raise HTTPException(status_code=404)
+        file_path = frontend_dist / full_path
+        if full_path and file_path.is_file():
+            return FileResponse(file_path)
         return FileResponse(frontend_dist / "index.html")
