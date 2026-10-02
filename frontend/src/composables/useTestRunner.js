@@ -1,7 +1,7 @@
 import { ref, onMounted } from 'vue'
 
 export function useTestRunner() {
-  const targetPath = ref('/Users/xuandi/repo/PytestDeck')
+  const targetPath = ref('')
   const activeSuite = ref('backend/tests/unit')
   const isDiscovering = ref(false)
   const isRunning = ref(false)
@@ -172,8 +172,31 @@ export function useTestRunner() {
     activeTab.value = 'live'
   }
 
-  onMounted(() => {
+  const fetchConfig = async () => {
+    try {
+      const res = await fetch('/api/config')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.config) {
+          availableSuites.value = [
+            { label: 'Unit Tests', path: data.config.unit_dir || 'backend/tests/unit' },
+            { label: 'Integration Tests', path: data.config.integration_dir || 'backend/tests/integration' },
+            { label: 'Acceptance (Behave)', path: data.config.acceptance_dir || 'backend/tests/acceptance' }
+          ]
+          activeSuite.value = availableSuites.value[0].path
+        }
+        if (data.default_target_path) {
+          targetPath.value = data.default_target_path
+        }
+      }
+    } catch {
+      // Keep default if config fetch fails
+    }
     discoverTests()
+  }
+
+  onMounted(() => {
+    fetchConfig()
   })
 
   return {

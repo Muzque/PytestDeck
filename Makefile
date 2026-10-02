@@ -1,4 +1,4 @@
-.PHONY: help unit-test integration-test acceptance-test e2e-test lint build-frontend run-dev deploy
+.PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run-dev deploy
 
 IMAGE_NAME ?= pytestdeck
 IMAGE_TAG ?= latest
@@ -6,6 +6,8 @@ IMAGE_TAG ?= latest
 help: ## Display available commands
 	@echo "PytestDeck Automation Commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+test: lint unit-test integration-test acceptance-test e2e-test ## Run linting, unit, integration, acceptance, and E2E tests
 
 lint: ## Run linter and code checks
 	@echo "Running Backend & Frontend Linting checks..."

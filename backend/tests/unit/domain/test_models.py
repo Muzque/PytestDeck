@@ -87,10 +87,10 @@ def test_behave_config_build_command():
     cfg = BehaveConfig()
     assert cfg.build_command() == ["uv", "run", "behave", "--color=always"]
 
-    # Command with path adjustment for backend/tests/acceptance
+    # Command with nodes and extra_args
     cfg_full = BehaveConfig(
         extra_args=["--tags=@smoke"],
-        nodes=["backend/tests/acceptance", "features/login.feature"],
+        nodes=["tests/acceptance", "features/login.feature"],
     )
     cmd = cfg_full.build_command()
     assert cmd == [
@@ -99,7 +99,7 @@ def test_behave_config_build_command():
         "behave",
         "--color=always",
         "--tags=@smoke",
-        "backend/tests/acceptance/features",
+        "tests/acceptance",
         "features/login.feature",
     ]
 

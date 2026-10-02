@@ -2,20 +2,20 @@ import pytest
 
 from infrastructure.discovery_service import (
     PytestDiscoveryService,
-    parse_pytestdeck_config,
+    get_env_config,
 )
 
 
-def test_parse_pytestdeck_config_nonexistent(tmp_path):
-    cfg = parse_pytestdeck_config(tmp_path / "nonexistent.toml")
-    assert cfg == {}
+def test_get_env_config_defaults(monkeypatch):
+    monkeypatch.delenv("UNIT_DIR", raising=False)
+    cfg = get_env_config()
+    assert cfg["unit_dir"] == "backend/tests/unit"
 
 
-def test_parse_pytestdeck_config_valid(tmp_path):
-    toml_file = tmp_path / "pytestdeck.toml"
-    toml_file.write_text('[pytestdeck]\nunit_dir = "tests/unit"\n', encoding="utf-8")
-    cfg = parse_pytestdeck_config(toml_file)
-    assert cfg.get("unit_dir") == "tests/unit"
+def test_get_env_config_custom(monkeypatch):
+    monkeypatch.setenv("UNIT_DIR", "custom/unit")
+    cfg = get_env_config()
+    assert cfg["unit_dir"] == "custom/unit"
 
 
 @pytest.mark.anyio

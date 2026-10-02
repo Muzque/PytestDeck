@@ -2,29 +2,20 @@ import asyncio
 import json
 import os
 import tempfile
-from pathlib import Path
 from typing import Any
 
 
-def parse_pytestdeck_config(config_path: Path) -> dict[str, Any]:
-    """Parses the root pytestdeck.toml configuration file.
-
-    Args:
-        config_path: Path object pointing to the target pytestdeck.toml file.
+def get_env_config() -> dict[str, Any]:
+    """Retrieves PytestDeck configuration values from environment variables.
 
     Returns:
-        dict[str, Any]: Parsed configuration dictionary under [pytestdeck] section.
+        dict[str, Any]: Dictionary containing configured suite paths and environment settings.
     """
-    if not config_path.exists():
-        return {}
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib  # type: ignore
-
-    with open(config_path, "rb") as f:
-        data = tomllib.load(f)
-    return data.get("pytestdeck", {})
+    return {
+        "unit_dir": os.getenv("UNIT_DIR", "backend/tests/unit"),
+        "integration_dir": os.getenv("INTEGRATION_DIR", "backend/tests/integration"),
+        "acceptance_dir": os.getenv("ACCEPTANCE_DIR", "backend/tests/acceptance"),
+    }
 
 
 class PytestDiscoveryService:
@@ -43,13 +34,13 @@ class PytestDiscoveryService:
         Raises:
             ValueError: If target_path does not exist or is not a directory.
         """
-        target_dir = Path(target_path).resolve()
-        if not target_dir.exists() or not target_dir.is_dir():
-            raise ValueError(f"Invalid target path: {target_path}")
+        from domain.services import resolve_target_path
+
+        target_dir = resolve_target_path(target_path)
 
         # Handle Behave feature files discovery if suite is acceptance
-        if "acceptance" in suite_rel_path:
-            suite_dir = target_dir / suite_rel_path
+        if "acceptance" in suite_rel_path or suite_rel_path.endswith(".feature"):
+            suite_dir = target_dir / suite_rel_path if suite_rel_path else target_dir
             collectors = []
             if suite_dir.exists():
                 feature_files = sorted(suite_dir.rglob("*.feature"))
@@ -77,15 +68,27 @@ class PytestDiscoveryService:
 
             if suite_rel_path:
                 ini_path = target_dir / suite_rel_path / "pytest.ini"
+                if not ini_path.exists():
+                    ini_path = target_dir / "pytest.ini"
                 if ini_path.exists():
                     cmd.extend(["-c", str(ini_path)])
                 cmd.append(suite_rel_path)
+
+            env = dict(os.environ)
+            env["PYTHONUNBUFFERED"] = "1"
+
+            src_paths = [str(target_dir)]
+            existing_pythonpath = env.get("PYTHONPATH", "")
+            if existing_pythonpath:
+                src_paths.append(existing_pythonpath)
+            env["PYTHONPATH"] = os.pathsep.join(src_paths)
 
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=str(target_dir),
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
             )
             stdout_bytes, stderr_bytes = await proc.communicate()
 

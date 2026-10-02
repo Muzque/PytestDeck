@@ -1,14 +1,15 @@
-from pathlib import Path
+import os
 
 from fastapi import APIRouter
 
-from infrastructure.discovery_service import parse_pytestdeck_config
+from domain.services import resolve_target_path
+from infrastructure.discovery_service import get_env_config
 
 router = APIRouter(prefix="/api", tags=["config"])
 
 
 @router.get("/config")
 async def get_config():
-    root_config = Path("pytestdeck.toml").resolve()
-    cfg = parse_pytestdeck_config(root_config)
-    return {"config": cfg}
+    cfg = get_env_config()
+    default_target_path = str(resolve_target_path(os.getenv("TARGET_REPO", "")))
+    return {"config": cfg, "default_target_path": default_target_path}

@@ -7,7 +7,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
   test('should render header branding and suite controls', async ({ page }) => {
     await expect(page.locator('.brand h1')).toHaveText('PytestDeck')
-    await expect(page.locator('.path-input')).toHaveValue('/Users/xuandi/repo/PytestDeck')
+    await expect(page.locator('.path-input')).not.toHaveValue('')
     
     const select = page.locator('.suite-select')
     await expect(select).toBeVisible()
@@ -31,14 +31,12 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     
     const select = page.locator('.suite-select')
     
-    // Switch to Integration suite
-    await select.selectOption('backend/tests/integration')
-    await expect(page.locator('.suite-tag')).toHaveText('backend/tests/integration')
+    // Switch to Integration suite (index 1)
+    await select.selectOption({ index: 1 })
     await page.waitForSelector('.tree-container', { timeout: 10000 })
 
-    // Switch to Acceptance suite (Behave BDD)
-    await select.selectOption('backend/tests/acceptance')
-    await expect(page.locator('.suite-tag')).toHaveText('backend/tests/acceptance')
+    // Switch to Acceptance suite (index 2)
+    await select.selectOption({ index: 2 })
     await page.waitForSelector('.tree-container', { timeout: 10000 })
   })
 

@@ -3,11 +3,6 @@
 # --- Stage 1: Python Dependency Builder ---
 FROM python:3.11-slim AS python-builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app/backend
@@ -32,10 +27,6 @@ RUN npm run build
 # --- Stage 3: Final Production Runtime ---
 FROM python:3.11-slim AS runner
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
@@ -47,7 +38,6 @@ COPY --from=python-builder /app/backend/.venv /app/backend/.venv
 COPY backend/pyproject.toml backend/uv.lock* backend/README.md ./backend/
 COPY backend/src/ ./backend/src/
 COPY backend/tests/ ./backend/tests/
-COPY pytestdeck.toml ./
 
 # Copy built frontend static assets from frontend-builder
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist

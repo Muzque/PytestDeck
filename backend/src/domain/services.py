@@ -1,6 +1,35 @@
+from pathlib import Path
 from typing import Any
 
 from domain.models import NodeType, TestNode
+
+
+def resolve_target_path(target_path: str) -> Path:
+    """Resolves and validates target directory path with fallback for container runtime environments."""
+    if target_path:
+        p = Path(target_path).expanduser().resolve()
+        if p.exists() and p.is_dir():
+            return p
+        # Container fallback when host path is passed as TARGET_REPO env var
+        target_vol = Path("/target")
+        if target_vol.exists() and target_vol.is_dir():
+            return target_vol.resolve()
+        raise ValueError(f"Invalid target path: {target_path}")
+
+    # Fallback for empty target_path (default container/server target)
+    target_vol = Path("/target")
+    if target_vol.exists() and target_vol.is_dir():
+        return target_vol.resolve()
+
+    app_root = Path.cwd().resolve()
+    if app_root.name == "backend" and (app_root.parent / "backend").exists():
+        app_root = app_root.parent
+
+    if app_root.exists() and app_root.is_dir():
+        return app_root
+
+    raise ValueError("Invalid target path: empty")
+
 
 
 def build_tree_from_collectors(collectors: list[dict[str, Any]], suite_prefix: str = "") -> TestNode:

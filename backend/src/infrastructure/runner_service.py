@@ -77,14 +77,12 @@ class SubprocessRunnerService:
         env["PY_COLORS"] = "1"
         env["FORCE_COLOR"] = "1"
 
-        # Ensure target repository's backend/src directory (if present) is on PYTHONPATH
-        backend_src = self.target_path / "backend" / "src"
+        # Ensure target repository root is on PYTHONPATH
+        src_paths = [str(self.target_path)]
         existing_pythonpath = env.get("PYTHONPATH", "")
-        paths = [str(backend_src)] if backend_src.exists() else []
         if existing_pythonpath:
-            paths.append(existing_pythonpath)
-        if paths:
-            env["PYTHONPATH"] = os.pathsep.join(paths)
+            src_paths.append(existing_pythonpath)
+        env["PYTHONPATH"] = os.pathsep.join(src_paths)
 
 
         self.proc = await asyncio.create_subprocess_exec(

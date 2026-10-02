@@ -7,6 +7,14 @@ services:
       dockerfile: Dockerfile
     image: pytestdeck:latest
     container_name: pytestdeck
+    environment:
+      - TARGET_REPO=${TARGET_REPO:-.}
+      - UNIT_DIR=${UNIT_DIR:-backend/tests/unit}
+      - INTEGRATION_DIR=${INTEGRATION_DIR:-backend/tests/integration}
+      - ACCEPTANCE_DIR=${ACCEPTANCE_DIR:-backend/tests/acceptance}
+      - PORT=${PORT:-9388}
+    volumes:
+      - ${TARGET_REPO:-.}:/target
     ports:
-      - "9388:9388"
+      - "${PORT:-9388}:9388"
     restart: unless-stopped

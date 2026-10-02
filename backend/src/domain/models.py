@@ -150,13 +150,7 @@ class BehaveConfig(BaseExecutionConfig):
         if self.extra_args:
             cmd.extend(self.extra_args)
         if self.nodes:
-            adjusted_nodes = []
-            for n in self.nodes:
-                if n == "backend/tests/acceptance":
-                    adjusted_nodes.append("backend/tests/acceptance/features")
-                else:
-                    adjusted_nodes.append(n)
-            cmd.extend(adjusted_nodes)
+            cmd.extend(self.nodes)
         return cmd
 
 
