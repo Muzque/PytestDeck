@@ -114,16 +114,35 @@ const onChildToggleSelect = (targetNode) => {
   cursor: pointer;
 }
 .type-badge {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: #334155;
-  color: #94a3b8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
 }
-.type-badge.dir { background: #1e293b; color: #38bdf8; }
-.type-badge.fil { background: #334155; color: #a7f3d0; }
-.type-badge.fun { background: #475569; color: #fef08a; }
+.type-badge.directory, .type-badge.dir {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.type-badge.file, .type-badge.fil {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.type-badge.class, .type-badge.cls {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+.type-badge.function, .type-badge.fun {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
 .node-name {
   color: var(--text-main);
   white-space: nowrap;
