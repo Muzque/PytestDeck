@@ -54,20 +54,69 @@ PytestDeck allows you to inspect and run tests across any target Python reposito
 4. Click **Refresh Tree** to scan and populate the interactive test explorer hierarchy.
 5. Select individual tests or folders and click **▶ Run Selected** to execute and stream test outputs in real time.
 
-### Default Environment Configuration (`.env`)
-You can configure default target repository paths and test suite directories using a `.env` file (see `.env.example`):
+---
 
-```bash
-# Path to target Python repository (absolute path or relative path)
-TARGET_REPO=.
+## ⚙️ Environment Configuration (`.env`)
 
-# Relative directory paths for test suites in target repository
-UNIT_DIR=backend/tests/unit
-INTEGRATION_DIR=backend/tests/integration
-ACCEPTANCE_DIR=backend/tests/acceptance
+You can set default target repository paths and test suite directories using a `.env` file created at the PytestDeck root (copied from `.env.example`).
 
+### Sample Case Scenario
+
+Suppose you have a target project located on your system at `/Users/alex/projects/inventory-service`, with tests organized in `tests/unit` and `tests/integration`.
+
+Create a `.env` file with the following configuration:
+
+```env
+# Absolute path to the target Python repository
+TARGET_REPO=/Users/alex/projects/inventory-service
+
+# Relative paths to test suite directories inside the target repository
+UNIT_DIR=tests/unit
+INTEGRATION_DIR=tests/integration
+ACCEPTANCE_DIR=tests/acceptance
+
+# PytestDeck web port
 PORT=9388
 ```
+
+When you start PytestDeck (`make deploy` or `make run-dev`), the dashboard will automatically load `/Users/alex/projects/inventory-service` as the default active target and populate its suite dropdown options.
+
+---
+
+## ⚙️ Target Repository `pytest.ini` Support
+
+PytestDeck seamlessly integrates with your target repository's standard `pytest.ini` (as well as `pyproject.toml` or `setup.cfg`).
+
+When PytestDeck discovers and executes tests, it automatically inherits and applies the arguments, markers, and path settings defined in your target repo's `pytest.ini`.
+
+### Sample `pytest.ini`
+
+Place a `pytest.ini` file at the root or test directory of your target repository:
+
+```ini
+[pytest]
+# Minimum pytest version requirement
+minversion = 7.0
+
+# Add default command-line options
+addopts = -v --tb=short --strict-markers
+
+# Register custom test markers
+markers =
+    slow: marks tests as slow (deselect with '-m "not slow"')
+    integration: marks tests requiring external services
+    smoke: core sanity checks
+
+# Custom test file naming patterns
+python_files = test_*.py *_test.py
+python_classes = Test* *Suite
+python_functions = test_*
+
+# Add source directory to pythonpath
+pythonpath = src
+```
+
+PytestDeck automatically respects these options during execution—including custom markers passed via the UI filter bar and module import paths.
 
 ---
 
