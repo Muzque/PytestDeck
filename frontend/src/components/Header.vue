@@ -1,4 +1,6 @@
 <script setup>
+import { useTheme } from '../composables/useTheme'
+
 defineProps({
   targetPath: { type: String, required: true },
   activeSuite: { type: String, required: true },
@@ -15,6 +17,8 @@ const emit = defineEmits([
   'run',
   'stop'
 ])
+
+const { currentTheme, themes } = useTheme()
 </script>
 
 <template>
@@ -47,6 +51,12 @@ const emit = defineEmits([
     </div>
 
     <div class="run-actions">
+      <select v-model="currentTheme" class="theme-select" title="Switch Theme">
+        <option v-for="t in themes" :key="t.id" :value="t.id">
+          {{ t.label }}
+        </option>
+      </select>
+
       <button v-if="!isRunning" class="btn btn-primary" @click="emit('run')">
         ▶ Run Selected ({{ selectedCount }})
       </button>
