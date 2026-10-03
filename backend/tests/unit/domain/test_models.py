@@ -56,7 +56,7 @@ def test_pytest_config_build_command():
     """Verifies that PytestConfig constructs correct command line arguments."""
     # Default command
     cfg = PytestConfig()
-    assert cfg.build_command() == ["uv", "run", "pytest", "-v", "--color=yes"]
+    assert cfg.build_command() == ["uv", "run", "--no-sync", "pytest", "-v", "--color=yes"]
 
     # Full command with options
     cfg_full = PytestConfig(
@@ -69,6 +69,7 @@ def test_pytest_config_build_command():
     assert cmd == [
         "uv",
         "run",
+        "--no-sync",
         "pytest",
         "-v",
         "--color=yes",
@@ -85,7 +86,7 @@ def test_behave_config_build_command():
     """Verifies that BehaveConfig constructs correct command line arguments."""
     # Default command
     cfg = BehaveConfig()
-    assert cfg.build_command() == ["uv", "run", "behave", "--color=always"]
+    assert cfg.build_command() == ["uv", "run", "--no-sync", "behave", "--color=always"]
 
     # Command with nodes and extra_args
     cfg_full = BehaveConfig(
@@ -96,6 +97,7 @@ def test_behave_config_build_command():
     assert cmd == [
         "uv",
         "run",
+        "--no-sync",
         "behave",
         "--color=always",
         "--tags=@smoke",

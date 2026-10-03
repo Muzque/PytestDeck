@@ -82,6 +82,7 @@ class SubprocessRunnerService:
         env["PYTHONUNBUFFERED"] = "1"
         env["PY_COLORS"] = "1"
         env["FORCE_COLOR"] = "1"
+        env["UV_NO_SYNC"] = "1"
 
         # Ensure target repository root is on PYTHONPATH
         src_paths = [str(self.target_path)]

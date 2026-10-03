@@ -13,6 +13,7 @@ services:
       - INTEGRATION_DIR=${INTEGRATION_DIR:-backend/tests/integration}
       - ACCEPTANCE_DIR=${ACCEPTANCE_DIR:-backend/tests/acceptance}
       - PORT=${PORT:-9388}
+      - UV_NO_SYNC=1
     volumes:
       - ${TARGET_REPO:-.}:/target
     ports:

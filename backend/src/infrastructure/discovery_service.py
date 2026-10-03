@@ -61,7 +61,7 @@ class PytestDiscoveryService:
 
         try:
             cmd = [
-                "uv", "run", "pytest", "--collect-only",
+                "uv", "run", "--no-sync", "pytest", "--collect-only",
                 "--json-report", f"--json-report-file={tmp_report}",
                 "--disable-warnings"
             ]
@@ -76,6 +76,7 @@ class PytestDiscoveryService:
 
             env = dict(os.environ)
             env["PYTHONUNBUFFERED"] = "1"
+            env["UV_NO_SYNC"] = "1"
 
             src_paths = [str(target_dir)]
             existing_pythonpath = env.get("PYTHONPATH", "")
