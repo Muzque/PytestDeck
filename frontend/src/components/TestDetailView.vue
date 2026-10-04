@@ -864,8 +864,10 @@ export default {
   background: #080c14;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  padding: 14px 16px;
-  max-height: 380px;
+  padding: 16px 18px;
+  min-height: 320px;
+  max-height: 650px;
+  resize: vertical;
   overflow-y: auto;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
 }
