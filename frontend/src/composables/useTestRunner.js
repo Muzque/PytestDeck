@@ -74,6 +74,46 @@ export function useTestRunner() {
     }
   }
 
+  const methodOutputs = ref({})
+  const liveMethodRun = ref(null)
+
+  try {
+    const saved = localStorage.getItem('pytestdeck_method_outputs')
+    if (saved) {
+      methodOutputs.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to parse cached method outputs', e)
+  }
+
+  const getMethodOutput = (nodeId) => {
+    if (!nodeId) return null
+    if (methodOutputs.value[nodeId]) return methodOutputs.value[nodeId]
+    for (const [key, val] of Object.entries(methodOutputs.value)) {
+      if (nodeId.endsWith(key) || key.endsWith(nodeId)) {
+        return val
+      }
+    }
+    return null
+  }
+
+  const currentMethodOutput = computed(() => {
+    if (!singleSelectedNode.value) return null
+    if (isRunning.value && liveMethodRun.value) {
+      return liveMethodRun.value
+    }
+    return getMethodOutput(singleSelectedNode.value.id)
+  })
+
+  const runSingleMethod = (nodeId) => {
+    if (!nodeId || isRunning.value) return
+    selectedNodes.value = new Set([nodeId])
+    if (!extraArgs.value.includes('-s')) {
+      extraArgs.value = extraArgs.value ? `${extraArgs.value} -s` : '-s'
+    }
+    runTests()
+  }
+
   watch([singleSelectedNode, isDetailSuite], async ([node, detailSuite]) => {
     if (detailSuite && node) {
       await fetchTestDetail(node.id)
@@ -86,12 +126,12 @@ export function useTestRunner() {
     }
   })
 
-
   const logs = ref([])
   const exitCode = ref(null)
   const summary = ref(null)
   const markerFilter = ref('')
   const extraArgs = ref('')
+
 
   const runHistory = ref([])
   const selectedHistoryId = ref(null)
@@ -207,10 +247,37 @@ export function useTestRunner() {
           const msg = JSON.parse(event.data)
           if (msg.type === 'stdout' || msg.type === 'status') {
             appendLog(msg.data)
+            if (singleSelectedNode.value && selectedNodes.value.size === 1) {
+              const nid = singleSelectedNode.value.id
+              if (!liveMethodRun.value) {
+                liveMethodRun.value = {
+                  node_id: nid,
+                  outcome: 'running',
+                  duration: null,
+                  timestamp: new Date().toLocaleTimeString(),
+                  output: msg.data
+                }
+              } else {
+                liveMethodRun.value.output += msg.data
+              }
+            }
           } else if (msg.type === 'finished') {
             isRunning.value = false
             exitCode.value = msg.exit_code
             summary.value = msg.summary
+
+            if (msg.method_outputs) {
+              methodOutputs.value = {
+                ...methodOutputs.value,
+                ...msg.method_outputs
+              }
+              try {
+                localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
+              } catch (e) {
+                // Ignore storage limits
+              }
+            }
+            liveMethodRun.value = null
 
             const historyRecord = {
               id: Date.now(),
@@ -225,10 +292,12 @@ export function useTestRunner() {
           } else if (msg.type === 'error') {
             appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
             isRunning.value = false
+            liveMethodRun.value = null
           }
         } catch {
           appendLog(event.data)
         }
+
       }
 
       ws.onerror = (err) => {
@@ -406,7 +475,12 @@ export function useTestRunner() {
     isLoadingDetail,
     isDetailSuite,
     singleSelectedNode,
-    fetchTestDetail
+    fetchTestDetail,
+    methodOutputs,
+    currentMethodOutput,
+    runSingleMethod,
+    getMethodOutput
   }
 }
+
 

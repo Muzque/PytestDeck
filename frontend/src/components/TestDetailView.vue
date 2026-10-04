@@ -9,13 +9,36 @@ const props = defineProps({
   isLoading: {
     type: Boolean,
     default: false
+  },
+  latestRun: {
+    type: Object,
+    default: null
+  },
+  isRunning: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['run-test'])
+const emit = defineEmits(['run-test', 'run-single-method'])
 
 const copied = ref(false)
 const copiedId = ref(false)
+const copiedOutput = ref(false)
+
+const copyOutput = async () => {
+  if (!props.latestRun?.output) return
+  try {
+    await navigator.clipboard.writeText(props.latestRun.output)
+    copiedOutput.value = true
+    setTimeout(() => {
+      copiedOutput.value = false
+    }, 2000)
+  } catch (e) {
+    console.error('Failed to copy output:', e)
+  }
+}
+
 
 const copyDocstring = async () => {
   if (!props.detail?.docstring) return
@@ -119,8 +142,63 @@ const copyNodeId = async () => {
         </div>
       </div>
 
+      <!-- Latest Run Output & Logs Card -->
+      <div class="detail-card run-output-card">
+        <div class="card-section-header">
+          <div class="section-title-wrap">
+            <span class="section-icon">⚡</span>
+            <span class="section-heading">Latest Run Output</span>
+            <span 
+              v-if="latestRun" 
+              class="run-status-badge"
+              :class="'status-' + (latestRun.outcome || 'unknown')"
+            >
+              {{ (latestRun.outcome || 'UNKNOWN').toUpperCase() }}
+            </span>
+            <span v-if="latestRun && latestRun.duration" class="run-meta-pill">
+              ⏱️ {{ latestRun.duration }}s
+            </span>
+            <span v-if="latestRun && latestRun.timestamp" class="run-meta-pill">
+              🕒 {{ latestRun.timestamp }}
+            </span>
+          </div>
+
+          <div class="run-actions">
+            <button 
+              v-if="latestRun && latestRun.output" 
+              class="btn-copy-output"
+              :class="{ active: copiedOutput }"
+              @click="copyOutput"
+              title="Copy output logs"
+            >
+              {{ copiedOutput ? '✓ Copied Output' : 'Copy Output' }}
+            </button>
+
+            <button 
+              class="btn-run-method" 
+              :disabled="isRunning"
+              @click="$emit('run-single-method', detail.node_id)"
+              title="Execute this test method with -s flag"
+            >
+              {{ isRunning ? '⏳ Running...' : '▶ Run Test (-s)' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal Output Box -->
+        <div v-if="latestRun && latestRun.output" class="method-terminal-box">
+          <pre class="method-terminal-text">{{ latestRun.output }}</pre>
+        </div>
+        <div v-else class="method-terminal-empty">
+          <span class="terminal-empty-icon">⚪</span>
+          <p class="empty-text">No execution output recorded for this test method yet.</p>
+          <span class="empty-hint">Click <strong>▶ Run Test (-s)</strong> to execute this test and capture console logs.</span>
+        </div>
+      </div>
+
       <!-- Docstring Section -->
       <div class="detail-card docstring-card">
+
         <div class="card-section-header">
           <div class="section-title-wrap">
             <span class="section-icon">📝</span>
@@ -591,4 +669,156 @@ export default {
   color: var(--text-main);
   word-break: break-word;
 }
+
+/* Latest Run Output Styles */
+.run-output-card {
+  border-left: 3px solid rgba(56, 189, 248, 0.4);
+}
+
+.run-status-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.status-passed {
+  background: rgba(52, 211, 153, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.15);
+}
+
+.status-failed {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.15);
+}
+
+.status-skipped {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.status-running {
+  background: rgba(56, 189, 248, 0.25);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  animation: pulse-badge 1.5s infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.status-unknown {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+.run-meta-pill {
+  font-size: 0.75rem;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.run-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-copy-output {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.btn-copy-output:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+}
+
+.btn-copy-output.active {
+  background: rgba(52, 211, 153, 0.25);
+  border-color: #34d399;
+  color: #34d399;
+}
+
+.btn-run-method {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-run-method:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.35) 0%, rgba(99, 102, 241, 0.35) 100%);
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+}
+
+.btn-run-method:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.method-terminal-box {
+  background: #080c14;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 14px 16px;
+  max-height: 380px;
+  overflow-y: auto;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.method-terminal-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", Courier, monospace;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.method-terminal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 12, 20, 0.4);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.terminal-empty-icon {
+  font-size: 1.4rem;
+  margin-bottom: 6px;
+  opacity: 0.6;
+}
 </style>
+

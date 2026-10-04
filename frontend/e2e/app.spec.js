@@ -169,6 +169,36 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await scenarioRow.click()
     await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
   })
+
+  test('should display latest run output card and execute single test method with -s', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Switch to Integration suite (index 1)
+    const select = page.locator('.suite-select')
+    await select.selectOption({ index: 1 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Select a test method
+    const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
+    await expect(funcRow).toBeVisible({ timeout: 15000 })
+    await funcRow.click()
+
+    // Verify Latest Run Output card is displayed
+    const runOutputCard = page.locator('.run-output-card')
+    await expect(runOutputCard).toBeVisible()
+
+    // Click Run Test (-s) button
+    const runMethodBtn = page.locator('.btn-run-method')
+    await expect(runMethodBtn).toBeVisible()
+    await runMethodBtn.click()
+
+    // Wait for method execution to complete
+    await expect(page.locator('.btn-run-method')).toBeEnabled({ timeout: 15000 })
+
+    // Verify status badge appears
+    await expect(page.locator('.run-status-badge')).toBeVisible()
+  })
 })
+
 
 

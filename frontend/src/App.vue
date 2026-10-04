@@ -37,8 +37,11 @@ const {
   selectedTestDetail,
   isLoadingDetail,
   isDetailSuite,
-  singleSelectedNode
+  singleSelectedNode,
+  currentMethodOutput,
+  runSingleMethod
 } = useTestRunner()
+
 
 
 const { activeTooltip } = useTooltip()
@@ -126,9 +129,13 @@ const { activeTooltip } = useTooltip()
             <TestDetailView 
               :detail="selectedTestDetail" 
               :isLoading="isLoadingDetail" 
+              :latestRun="currentMethodOutput"
+              :isRunning="isRunning"
               @run-test="runTests"
+              @run-single-method="runSingleMethod"
             />
           </div>
+
 
           <!-- Metrics & Summary Tab -->
           <div v-show="activeTab === 'summary'" class="tab-pane summary-pane">

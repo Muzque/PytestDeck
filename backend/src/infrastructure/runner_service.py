@@ -95,6 +95,10 @@ class SubprocessRunnerService:
         env["PYTHONPATH"] = os.pathsep.join(src_paths)
 
 
+        from infrastructure.output_splitter import MethodOutputCollector
+
+        output_collector = MethodOutputCollector(requested_nodes=nodes)
+
         self.proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(self.target_path),
@@ -112,6 +116,7 @@ class SubprocessRunnerService:
                 if not line:
                     break
                 line_str = line.decode("utf-8", errors="replace")
+                output_collector.process_line(line_str)
                 yield json.dumps({"type": "stdout", "data": line_str})
 
         exit_code = await self.proc.wait()
@@ -121,10 +126,19 @@ class SubprocessRunnerService:
             try:
                 with open(report_json_path, "r", encoding="utf-8") as f:
                     summary["report"] = json.load(f)
+                    output_collector.merge_json_report(summary["report"])
             except Exception as e:
                 summary["report_error"] = str(e)
 
-        yield json.dumps({"type": "finished", "exit_code": exit_code, "summary": summary})
+        method_outputs = output_collector.get_results()
+
+        yield json.dumps({
+            "type": "finished",
+            "exit_code": exit_code,
+            "summary": summary,
+            "method_outputs": method_outputs,
+        })
+
 
     async def abort(self) -> None:
         """Aborts the currently running subprocess execution cleanly."""
