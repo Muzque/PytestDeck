@@ -4,6 +4,8 @@ import TestExplorer from './components/TestExplorer.vue'
 import TerminalView from './components/TerminalView.vue'
 import MetricsSummary from './components/MetricsSummary.vue'
 import RunHistory from './components/RunHistory.vue'
+import EnvLogModal from './components/EnvLogModal.vue'
+import TestDetailView from './components/TestDetailView.vue'
 import { useTestRunner } from './composables/useTestRunner'
 import { useTooltip } from './composables/useTooltip'
 
@@ -13,6 +15,10 @@ const {
   availableSuites,
   isDiscovering,
   isRunning,
+  envStatus,
+  envLogs,
+  showEnvLogModal,
+  fetchEnvLogs,
   testTree,
   selectedNodes,
   activeTab,
@@ -27,8 +33,16 @@ const {
   toggleSelectNode,
   runTests,
   stopTests,
-  selectHistoryItem
+  selectHistoryItem,
+  selectedTestDetail,
+  isLoadingDetail,
+  isDetailSuite,
+  singleSelectedNode,
+  currentMethodOutput,
+  runSingleMethod
 } = useTestRunner()
+
+
 
 const { activeTooltip } = useTooltip()
 </script>
@@ -42,10 +56,12 @@ const { activeTooltip } = useTooltip()
       :availableSuites="availableSuites"
       :isDiscovering="isDiscovering"
       :isRunning="isRunning"
+      :envStatus="envStatus"
       :selectedCount="selectedNodes.size"
       @discover="discoverTests"
       @run="runTests"
       @stop="stopTests"
+      @open-env-logs="showEnvLogModal = true; fetchEnvLogs()"
     />
 
     <!-- Main Workspace Area -->
@@ -69,6 +85,15 @@ const { activeTooltip } = useTooltip()
             @click="activeTab = 'live'"
           >
             Terminal Output
+          </button>
+          <button 
+            v-if="isDetailSuite && singleSelectedNode"
+            class="tab-btn tab-btn-detail" 
+            :class="{ active: activeTab === 'detail' }"
+            @click="activeTab = 'detail'"
+          >
+            <span class="tab-indicator-dot"></span>
+            Detail Info
           </button>
           <button 
             class="tab-btn" 
@@ -99,6 +124,19 @@ const { activeTooltip } = useTooltip()
             <TerminalView :logs="logs" />
           </div>
 
+          <!-- Detail Info Tab (for Integration & Behave suites) -->
+          <div v-show="activeTab === 'detail'" class="tab-pane detail-pane">
+            <TestDetailView 
+              :detail="selectedTestDetail" 
+              :isLoading="isLoadingDetail" 
+              :latestRun="currentMethodOutput"
+              :isRunning="isRunning"
+              @run-test="runTests"
+              @run-single-method="runSingleMethod"
+            />
+          </div>
+
+
           <!-- Metrics & Summary Tab -->
           <div v-show="activeTab === 'summary'" class="tab-pane summary-pane">
             <MetricsSummary :summary="summary" :exitCode="exitCode" />
@@ -121,6 +159,7 @@ const { activeTooltip } = useTooltip()
             />
           </div>
         </div>
+
       </main>
     </div>
 
@@ -142,5 +181,14 @@ const { activeTooltip } = useTooltip()
         </div>
       </div>
     </Teleport>
+
+    <!-- Target Environment Logs Modal -->
+    <EnvLogModal 
+      :show="showEnvLogModal" 
+      :envStatus="envStatus" 
+      :logs="envLogs" 
+      @close="showEnvLogModal = false" 
+      @refresh="fetchEnvLogs" 
+    />
   </div>
 </template>

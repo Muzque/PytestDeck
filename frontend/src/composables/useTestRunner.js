@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
 export function useTestRunner() {
   const targetPath = ref('')
@@ -9,11 +9,129 @@ export function useTestRunner() {
   const selectedNodes = ref(new Set())
   const activeTab = ref('live')
 
+  const selectedTestDetail = ref(null)
+  const isLoadingDetail = ref(false)
+
+  const isDetailSuite = computed(() => {
+    const s = (activeSuite.value || '').toLowerCase()
+    return s.includes('integration') || s.includes('acceptance') || s.endsWith('.feature')
+  })
+
+  const findNodeById = (root, id) => {
+    if (!root) return null
+    if (root.id === id) return root
+    if (root.children && root.children.length > 0) {
+      for (const child of root.children) {
+        const found = findNodeById(child, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  const singleSelectedNode = computed(() => {
+    if (selectedNodes.value.size !== 1) return null
+    const [id] = Array.from(selectedNodes.value)
+    const node = findNodeById(testTree.value, id)
+    if (node) {
+      if (node.type === 'function' || node.id.includes('::') || !node.children || node.children.length === 0) {
+        return node
+      }
+      return null
+    }
+    if (id && (id.includes('::') || id.endsWith('.py') || id.endsWith('.feature'))) {
+      return { id, name: id.split('::').pop(), type: 'function' }
+    }
+    return null
+  })
+
+  const fetchTestDetail = async (nodeId) => {
+    if (!nodeId) {
+      selectedTestDetail.value = null
+      return
+    }
+    isLoadingDetail.value = true
+    try {
+      const res = await fetch('/api/test-detail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPath.value,
+          node_id: nodeId
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        selectedTestDetail.value = data
+      } else {
+        selectedTestDetail.value = null
+      }
+    } catch (err) {
+      console.error('Failed to fetch test detail:', err)
+      selectedTestDetail.value = null
+    } finally {
+      isLoadingDetail.value = false
+    }
+  }
+
+  const methodOutputs = ref({})
+  const liveMethodRun = ref(null)
+
+  try {
+    const saved = localStorage.getItem('pytestdeck_method_outputs')
+    if (saved) {
+      methodOutputs.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to parse cached method outputs', e)
+  }
+
+  const getMethodOutput = (nodeId) => {
+    if (!nodeId) return null
+    if (methodOutputs.value[nodeId]) return methodOutputs.value[nodeId]
+    for (const [key, val] of Object.entries(methodOutputs.value)) {
+      if (nodeId.endsWith(key) || key.endsWith(nodeId)) {
+        return val
+      }
+    }
+    return null
+  }
+
+  const currentMethodOutput = computed(() => {
+    if (!singleSelectedNode.value) return null
+    if (isRunning.value && liveMethodRun.value) {
+      return liveMethodRun.value
+    }
+    return getMethodOutput(singleSelectedNode.value.id)
+  })
+
+  const runSingleMethod = (nodeId) => {
+    if (!nodeId || isRunning.value) return
+    selectedNodes.value = new Set([nodeId])
+    if (!extraArgs.value.includes('-s')) {
+      extraArgs.value = extraArgs.value ? `${extraArgs.value} -s` : '-s'
+    }
+    runTests()
+  }
+
+  watch([singleSelectedNode, isDetailSuite], async ([node, detailSuite]) => {
+    if (detailSuite && node) {
+      await fetchTestDetail(node.id)
+      activeTab.value = 'detail'
+    } else {
+      selectedTestDetail.value = null
+      if (activeTab.value === 'detail') {
+        activeTab.value = 'live'
+      }
+    }
+  })
+
   const logs = ref([])
   const exitCode = ref(null)
   const summary = ref(null)
   const markerFilter = ref('')
   const extraArgs = ref('')
+
 
   const runHistory = ref([])
   const selectedHistoryId = ref(null)
@@ -55,6 +173,7 @@ export function useTestRunner() {
       testTree.value = data.tree
     } catch (err) {
       console.error(err)
+      appendLog(`\x1b[1;33mDiscovery: ${err.message}\x1b[0m\r\n`)
       testTree.value = null
     } finally {
       isDiscovering.value = false
@@ -128,10 +247,37 @@ export function useTestRunner() {
           const msg = JSON.parse(event.data)
           if (msg.type === 'stdout' || msg.type === 'status') {
             appendLog(msg.data)
+            if (singleSelectedNode.value && selectedNodes.value.size === 1) {
+              const nid = singleSelectedNode.value.id
+              if (!liveMethodRun.value) {
+                liveMethodRun.value = {
+                  node_id: nid,
+                  outcome: 'running',
+                  duration: null,
+                  timestamp: new Date().toLocaleTimeString(),
+                  output: msg.data
+                }
+              } else {
+                liveMethodRun.value.output += msg.data
+              }
+            }
           } else if (msg.type === 'finished') {
             isRunning.value = false
             exitCode.value = msg.exit_code
             summary.value = msg.summary
+
+            if (msg.method_outputs) {
+              methodOutputs.value = {
+                ...methodOutputs.value,
+                ...msg.method_outputs
+              }
+              try {
+                localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
+              } catch (e) {
+                // Ignore storage limits
+              }
+            }
+            liveMethodRun.value = null
 
             const historyRecord = {
               id: Date.now(),
@@ -146,10 +292,12 @@ export function useTestRunner() {
           } else if (msg.type === 'error') {
             appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
             isRunning.value = false
+            liveMethodRun.value = null
           }
         } catch {
           appendLog(event.data)
         }
+
       }
 
       ws.onerror = (err) => {
@@ -189,6 +337,80 @@ export function useTestRunner() {
     activeTab.value = 'live'
   }
 
+  const envStatus = ref({ ready: true, status: 'ready', message: '' })
+  const envLogs = ref('')
+  const showEnvLogModal = ref(false)
+  let healthPollTimer = null
+  let lastSeenLogOffset = 0
+
+  const fetchEnvLogs = async () => {
+    try {
+      const res = await fetch('/api/health/logs?tail=500')
+      if (res.ok) {
+        const data = await res.json()
+        envLogs.value = data.logs || ''
+      }
+    } catch {
+      // Ignore transient network errors
+    }
+  }
+
+  const checkHealth = async () => {
+    try {
+      const res = await fetch('/api/health')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.environment) {
+          const wasNotReady = !envStatus.value.ready
+          envStatus.value = data.environment
+
+          // Stream live preparation logs to terminal if available
+          if (data.environment.status === 'running') {
+            if (data.environment.recent_logs) {
+              const fullText = data.environment.recent_logs
+              if (fullText.length > lastSeenLogOffset) {
+                const newChunk = fullText.slice(lastSeenLogOffset)
+                lastSeenLogOffset = fullText.length
+                const lines = newChunk.split('\n')
+                for (const line of lines) {
+                  if (line.trim()) {
+                    appendLog(`\x1b[90m[uv sync]\x1b[0m ${line}\r\n`)
+                  }
+                }
+              }
+              envLogs.value = fullText
+            }
+            if (showEnvLogModal.value) {
+              fetchEnvLogs()
+            }
+          }
+
+          if (wasNotReady && envStatus.value.ready) {
+            appendLog('\x1b[1;32m[PytestDeck] Target environment is ready. Discovering tests...\x1b[0m\r\n')
+            fetchEnvLogs()
+            discoverTests()
+          } else if (wasNotReady && data.environment.status === 'failed') {
+            appendLog(`\x1b[1;31m[PytestDeck] ${data.environment.message}\x1b[0m\r\n`)
+            fetchEnvLogs()
+          }
+        }
+      }
+    } catch {
+      // Ignore transient network errors
+    }
+  }
+
+  const startHealthPolling = () => {
+    if (healthPollTimer) return
+    healthPollTimer = setInterval(async () => {
+      await checkHealth()
+      if (envStatus.value.ready || envStatus.value.status === 'failed') {
+        clearInterval(healthPollTimer)
+        healthPollTimer = null
+      }
+    }, 2000)
+  }
+
   const fetchConfig = async () => {
     try {
       const res = await fetch('/api/config')
@@ -209,7 +431,15 @@ export function useTestRunner() {
     } catch {
       // Keep default if config fetch fails
     }
-    discoverTests()
+
+    await checkHealth()
+    await fetchEnvLogs()
+    if (!envStatus.value.ready && envStatus.value.status === 'running') {
+      appendLog(`\x1b[1;33m[PytestDeck] ${envStatus.value.message}\x1b[0m\r\n`)
+      startHealthPolling()
+    } else {
+      discoverTests()
+    }
   }
 
   onMounted(() => {
@@ -222,6 +452,7 @@ export function useTestRunner() {
     availableSuites,
     isDiscovering,
     isRunning,
+    envStatus,
     testTree,
     selectedNodes,
     activeTab,
@@ -236,6 +467,20 @@ export function useTestRunner() {
     toggleSelectNode,
     runTests,
     stopTests,
-    selectHistoryItem
+    selectHistoryItem,
+    envLogs,
+    showEnvLogModal,
+    fetchEnvLogs,
+    selectedTestDetail,
+    isLoadingDetail,
+    isDetailSuite,
+    singleSelectedNode,
+    fetchTestDetail,
+    methodOutputs,
+    currentMethodOutput,
+    runSingleMethod,
+    getMethodOutput
   }
 }
+
+

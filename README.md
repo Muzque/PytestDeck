@@ -31,7 +31,18 @@ make deploy
 
 Once started, open **`http://127.0.0.1:9388`** in your browser.
 
-### 2. Local Run Mode
+> **How target dependencies work in Docker**
+>
+> Tests always run with the **target repository's own `uv` project** (its `pyproject.toml` / `uv.lock`), not PytestDeck's packages.
+> Because the host's `.venv` is built for macOS/Windows and can't run inside a Linux container, the container builds a separate Linux environment on startup:
+>
+> - `uv sync --all-groups` runs **in the background**, so the UI is available immediately.
+> - **In the UI**: The **Terminal Output** tab streams the live package preparation progress automatically. You can also click the status badge (`Preparing Env...` / `Ready` / `Env Failed`) in the top navigation header at any time to open the **Environment Setup Logs** modal.
+> - **In the Terminal**: Follow progress with `docker logs -f pytestdeck`, or `docker exec pytestdeck cat /cache/env_sync.log`.
+> - The environment, uv cache and Python installs are stored in the `pytestdeck_cache` Docker volume. The **first** start downloads everything; later deploys only re-sync when `uv.lock` changes.
+> - To reset it (e.g. after switching `TARGET_REPO`): `docker compose down -v`.
+
+### 2. Local Run Mode (fastest for local development)
 
 If you are running directly on your host machine without Docker:
 
@@ -40,6 +51,14 @@ make run-dev
 ```
 
 Open **`http://127.0.0.1:9388`** in your browser.
+
+This is the **recommended mode when the target repo lives on your machine**: `make run-dev` automatically loads `.env` (including `TARGET_REPO`, suite paths, and `PORT`) so your target repo is preselected immediately. In this mode, `uv run` inside the target directory reuses the target's existing local `.venv` directly, so there is no second environment to build and no waiting on startup. Make sure the target's environment is set up first:
+
+```bash
+cd /path/to/target-repo && uv sync --all-groups
+```
+
+*(`pytest-json-report`, which PytestDeck needs for discovery and reports, is injected automatically via `uv run --with`; you don't need to add it to the target's dependencies.)*
 
 ---
 

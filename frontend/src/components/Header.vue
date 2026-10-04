@@ -7,7 +7,8 @@ defineProps({
   availableSuites: { type: Array, required: true },
   isDiscovering: { type: Boolean, default: false },
   isRunning: { type: Boolean, default: false },
-  selectedCount: { type: Number, default: 0 }
+  selectedCount: { type: Number, default: 0 },
+  envStatus: { type: Object, default: () => ({ ready: true, status: 'ready', message: '' }) }
 })
 
 const emit = defineEmits([
@@ -15,7 +16,8 @@ const emit = defineEmits([
   'update:activeSuite',
   'discover',
   'run',
-  'stop'
+  'stop',
+  'open-env-logs'
 ])
 
 const { currentTheme, themes } = useTheme()
@@ -26,6 +28,20 @@ const { currentTheme, themes } = useTheme()
     <div class="brand">
       <img src="/favicon.svg" alt="PytestDeck Logo" class="brand-logo-img" />
       <h1>PytestDeck</h1>
+      <span 
+        class="env-status-badge" 
+        :class="'env-' + (envStatus?.status || 'ready')"
+        :title="(envStatus?.message || 'Target environment ready') + ' (Click to view logs)'"
+        role="button"
+        tabindex="0"
+        @click="emit('open-env-logs')"
+        @keydown.enter="emit('open-env-logs')"
+      >
+        <span class="status-dot"></span>
+        <span class="status-text">
+          {{ envStatus?.status === 'running' ? 'Preparing Env...' : (envStatus?.status === 'failed' ? 'Env Failed' : 'Ready') }}
+        </span>
+      </span>
     </div>
 
     <div class="target-controls">

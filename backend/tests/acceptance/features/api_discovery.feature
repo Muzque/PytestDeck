@@ -19,3 +19,11 @@ Feature: Test Discovery API
     Then the discover response status should be 200
     And the discovered tree total nodes should be greater than 0
     And the discovered root tree should exist
+
+  Scenario: Fetching test method details and docstring
+    Given PytestDeck backend is running
+    When a test detail request is sent for node "backend/tests/acceptance/features/api_discovery.feature::Discovering tests in the backend unit test suite"
+    Then the test detail response status should be 200
+    And the test detail name should be "Discovering tests in the backend unit test suite"
+    And the test detail type should be "scenario"
+

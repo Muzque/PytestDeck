@@ -69,6 +69,8 @@ def test_pytest_config_build_command():
     assert cmd == [
         "uv",
         "run",
+        "--with",
+        "pytest-json-report",
         "pytest",
         "-v",
         "--color=yes",
