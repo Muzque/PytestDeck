@@ -154,7 +154,14 @@ class BehaveConfig(BaseExecutionConfig):
 
         cmd = ["uv", "run", "behave", "--color=always"]
         if self.extra_args:
-            cmd.extend(self.extra_args)
+            translated_args = []
+            for arg in self.extra_args:
+                if arg == "-s":
+                    translated_args.append("--no-capture")
+                else:
+                    translated_args.append(arg)
+            cmd.extend(translated_args)
+
         if self.nodes:
             has_scenario = any("::" in n for n in self.nodes)
             if not has_scenario:

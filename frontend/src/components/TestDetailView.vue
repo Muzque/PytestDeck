@@ -1,5 +1,6 @@
 <script setup>
-import { ref } from 'vue'
+/* eslint-disable no-control-regex */
+import { ref, computed } from 'vue'
 
 const props = defineProps({
   detail: {
@@ -20,16 +21,44 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['run-test', 'run-single-method'])
+defineEmits(['run-test', 'run-single-method'])
 
 const copied = ref(false)
+
 const copiedId = ref(false)
 const copiedOutput = ref(false)
+
+const stripAnsi = (str) => {
+  if (!str) return ''
+  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+}
+
+const formattedOutput = computed(() => {
+  if (!props.latestRun?.output) return ''
+  let text = props.latestRun.output
+  let escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  return escaped
+    .replace(/\x1b\[32m/g, '<span style="color: #34d399; font-weight: 600;">')
+    .replace(/\x1b\[31m/g, '<span style="color: #f87171; font-weight: 600;">')
+    .replace(/\x1b\[33m/g, '<span style="color: #fbbf24;">')
+    .replace(/\x1b\[34m/g, '<span style="color: #60a5fa;">')
+    .replace(/\x1b\[35m/g, '<span style="color: #c084fc;">')
+    .replace(/\x1b\[36m/g, '<span style="color: #38bdf8;">')
+    .replace(/\x1b\[1m/g, '<span style="font-weight: 700; color: #f8fafc;">')
+    .replace(/\x1b\[90m/g, '<span style="color: #94a3b8;">')
+    .replace(/\x1b\[0m/g, '</span>')
+    .replace(/\x1b\[[0-9;]*m/g, '')
+})
 
 const copyOutput = async () => {
   if (!props.latestRun?.output) return
   try {
-    await navigator.clipboard.writeText(props.latestRun.output)
+    const clean = stripAnsi(props.latestRun.output)
+    await navigator.clipboard.writeText(clean)
     copiedOutput.value = true
     setTimeout(() => {
       copiedOutput.value = false
@@ -38,6 +67,7 @@ const copyOutput = async () => {
     console.error('Failed to copy output:', e)
   }
 }
+
 
 
 const copyDocstring = async () => {
@@ -178,22 +208,23 @@ const copyNodeId = async () => {
               class="btn-run-method" 
               :disabled="isRunning"
               @click="$emit('run-single-method', detail.node_id)"
-              title="Execute this test method with -s flag"
+              :title="detail.type === 'scenario' ? 'Execute this scenario' : 'Execute this test method with -s flag'"
             >
-              {{ isRunning ? '⏳ Running...' : '▶ Run Test (-s)' }}
+              {{ isRunning ? '⏳ Running...' : (detail.type === 'scenario' ? '▶ Run Scenario' : '▶ Run Test (-s)') }}
             </button>
           </div>
         </div>
 
         <!-- Terminal Output Box -->
         <div v-if="latestRun && latestRun.output" class="method-terminal-box">
-          <pre class="method-terminal-text">{{ latestRun.output }}</pre>
+          <pre class="method-terminal-text" v-html="formattedOutput"></pre>
         </div>
         <div v-else class="method-terminal-empty">
           <span class="terminal-empty-icon">⚪</span>
           <p class="empty-text">No execution output recorded for this test method yet.</p>
-          <span class="empty-hint">Click <strong>▶ Run Test (-s)</strong> to execute this test and capture console logs.</span>
+          <span class="empty-hint">Click <strong>{{ detail.type === 'scenario' ? '▶ Run Scenario' : '▶ Run Test (-s)' }}</strong> to execute this test and capture console logs.</span>
         </div>
+
       </div>
 
       <!-- Docstring Section -->

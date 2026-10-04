@@ -273,9 +273,10 @@ export function useTestRunner() {
               }
               try {
                 localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
-              } catch (e) {
+              } catch {
                 // Ignore storage limits
               }
+
             }
             liveMethodRun.value = null
 

@@ -105,3 +105,12 @@ def test_behave_config_build_command():
         "features/login.feature",
     ]
 
+
+def test_behave_config_translates_s_flag():
+    """Verifies that -s flag is translated to --no-capture for Behave."""
+    cfg = BehaveConfig(extra_args=["-s", "--tags=@portal"], nodes=["features/login.feature"])
+    cmd = cfg.build_command()
+    assert "--no-capture" in cmd
+    assert "-s" not in cmd
+
+
