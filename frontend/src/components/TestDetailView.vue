@@ -172,6 +172,46 @@ const copyNodeId = async () => {
         </div>
       </div>
 
+      <!-- Class Docstring (if exists) -->
+      <div v-if="detail.class_docstring" class="detail-card class-docstring-card">
+        <div class="card-section-header">
+          <div class="section-title-wrap">
+            <span class="section-icon">🏛️</span>
+            <span class="section-heading">Class Docstring ({{ detail.class_name }})</span>
+          </div>
+        </div>
+        <div class="docstring-box">
+          <pre class="docstring-text">{{ detail.class_docstring }}</pre>
+        </div>
+      </div>
+
+      <!-- Docstring Section -->
+      <div class="detail-card docstring-card">
+        <div class="card-section-header">
+          <div class="section-title-wrap">
+            <span class="section-icon">📝</span>
+            <span class="section-heading">Method Docstring</span>
+          </div>
+          <button 
+            v-if="detail.docstring" 
+            class="btn-copy-doc"
+            :class="{ active: copied }"
+            @click="copyDocstring"
+          >
+            {{ copied ? '✓ Copied Docstring' : 'Copy Docstring' }}
+          </button>
+        </div>
+
+        <div v-if="detail.docstring" class="docstring-box">
+          <pre class="docstring-text">{{ detail.docstring }}</pre>
+        </div>
+        <div v-else class="docstring-empty">
+          <span class="empty-subicon">💬</span>
+          <p class="empty-text">No docstring provided for this test method.</p>
+          <span class="empty-hint">Add a Python docstring (<code>"""..."""</code>) to provide documentation for this test case.</span>
+        </div>
+      </div>
+
       <!-- Latest Run Output & Logs Card -->
       <div class="detail-card run-output-card">
         <div class="card-section-header">
@@ -225,47 +265,6 @@ const copyNodeId = async () => {
           <span class="empty-hint">Click <strong>{{ detail.type === 'scenario' ? '▶ Run Scenario' : '▶ Run Test (-s)' }}</strong> to execute this test and capture console logs.</span>
         </div>
 
-      </div>
-
-      <!-- Docstring Section -->
-      <div class="detail-card docstring-card">
-
-        <div class="card-section-header">
-          <div class="section-title-wrap">
-            <span class="section-icon">📝</span>
-            <span class="section-heading">Method Docstring</span>
-          </div>
-          <button 
-            v-if="detail.docstring" 
-            class="btn-copy-doc"
-            :class="{ active: copied }"
-            @click="copyDocstring"
-          >
-            {{ copied ? '✓ Copied Docstring' : 'Copy Docstring' }}
-          </button>
-        </div>
-
-        <div v-if="detail.docstring" class="docstring-box">
-          <pre class="docstring-text">{{ detail.docstring }}</pre>
-        </div>
-        <div v-else class="docstring-empty">
-          <span class="empty-subicon">💬</span>
-          <p class="empty-text">No docstring provided for this test method.</p>
-          <span class="empty-hint">Add a Python docstring (<code>"""..."""</code>) to provide documentation for this test case.</span>
-        </div>
-      </div>
-
-      <!-- Class Docstring (if exists) -->
-      <div v-if="detail.class_docstring" class="detail-card class-docstring-card">
-        <div class="card-section-header">
-          <div class="section-title-wrap">
-            <span class="section-icon">🏛️</span>
-            <span class="section-heading">Class Docstring ({{ detail.class_name }})</span>
-          </div>
-        </div>
-        <div class="docstring-box">
-          <pre class="docstring-text">{{ detail.class_docstring }}</pre>
-        </div>
       </div>
 
       <!-- Behave Scenario Steps (if exists) -->
