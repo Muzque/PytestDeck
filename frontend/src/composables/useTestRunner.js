@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 
 export function useTestRunner() {
   const targetPath = ref('')
@@ -8,6 +8,84 @@ export function useTestRunner() {
   const testTree = ref(null)
   const selectedNodes = ref(new Set())
   const activeTab = ref('live')
+
+  const selectedTestDetail = ref(null)
+  const isLoadingDetail = ref(false)
+
+  const isDetailSuite = computed(() => {
+    const s = (activeSuite.value || '').toLowerCase()
+    return s.includes('integration') || s.includes('acceptance') || s.endsWith('.feature')
+  })
+
+  const findNodeById = (root, id) => {
+    if (!root) return null
+    if (root.id === id) return root
+    if (root.children && root.children.length > 0) {
+      for (const child of root.children) {
+        const found = findNodeById(child, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  const singleSelectedNode = computed(() => {
+    if (selectedNodes.value.size !== 1) return null
+    const [id] = Array.from(selectedNodes.value)
+    const node = findNodeById(testTree.value, id)
+    if (node) {
+      if (node.type === 'function' || node.id.includes('::') || !node.children || node.children.length === 0) {
+        return node
+      }
+      return null
+    }
+    if (id && (id.includes('::') || id.endsWith('.py') || id.endsWith('.feature'))) {
+      return { id, name: id.split('::').pop(), type: 'function' }
+    }
+    return null
+  })
+
+  const fetchTestDetail = async (nodeId) => {
+    if (!nodeId) {
+      selectedTestDetail.value = null
+      return
+    }
+    isLoadingDetail.value = true
+    try {
+      const res = await fetch('/api/test-detail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPath.value,
+          node_id: nodeId
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        selectedTestDetail.value = data
+      } else {
+        selectedTestDetail.value = null
+      }
+    } catch (err) {
+      console.error('Failed to fetch test detail:', err)
+      selectedTestDetail.value = null
+    } finally {
+      isLoadingDetail.value = false
+    }
+  }
+
+  watch([singleSelectedNode, isDetailSuite], async ([node, detailSuite]) => {
+    if (detailSuite && node) {
+      await fetchTestDetail(node.id)
+      activeTab.value = 'detail'
+    } else {
+      selectedTestDetail.value = null
+      if (activeTab.value === 'detail') {
+        activeTab.value = 'live'
+      }
+    }
+  })
+
 
   const logs = ref([])
   const exitCode = ref(null)
@@ -323,6 +401,12 @@ export function useTestRunner() {
     selectHistoryItem,
     envLogs,
     showEnvLogModal,
-    fetchEnvLogs
+    fetchEnvLogs,
+    selectedTestDetail,
+    isLoadingDetail,
+    isDetailSuite,
+    singleSelectedNode,
+    fetchTestDetail
   }
 }
+

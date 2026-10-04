@@ -73,3 +73,30 @@ def step_discover_tree_exists(context):
 def step_discover_tree_name(context, expected_name):
     data = context.response.json()
     assert data["tree"].get("name") == expected_name
+
+
+@when('a test detail request is sent for node "{node_id}"')
+def step_detail_request(context, node_id):
+    repo_path = str(Path(__file__).resolve().parents[5])
+    context.response = context.client.post(
+        "/api/test-detail",
+        json={"target_path": repo_path, "node_id": node_id},
+    )
+
+
+@then("the test detail response status should be 200")
+def step_detail_status(context):
+    assert context.response.status_code == 200
+
+
+@then('the test detail name should be "{expected_name}"')
+def step_detail_name(context, expected_name):
+    data = context.response.json()
+    assert data["name"] == expected_name
+
+
+@then('the test detail type should be "{expected_type}"')
+def step_detail_type(context, expected_type):
+    data = context.response.json()
+    assert data["type"] == expected_type
+

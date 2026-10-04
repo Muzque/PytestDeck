@@ -450,11 +450,53 @@ select {
   border-bottom-color: var(--accent-blue);
 }
 
+.tab-btn-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.05);
+  border-radius: 6px 6px 0 0;
+}
+
+.tab-btn-detail:hover {
+  background: rgba(56, 189, 248, 0.1);
+  color: #7dd3fc;
+}
+
+.tab-btn-detail.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.tab-indicator-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  box-shadow: 0 0 8px var(--accent-blue);
+  display: inline-block;
+  animation: pulse-detail-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-detail-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
 .tab-content {
   flex: 1;
   padding: 16px;
   position: relative;
+  overflow: hidden;
 }
+
+.detail-pane {
+  height: 100%;
+  overflow: hidden;
+}
+
 
 .tab-pane {
   width: 100%;

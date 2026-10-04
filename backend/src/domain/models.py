@@ -150,11 +150,32 @@ class BehaveConfig(BaseExecutionConfig):
         Returns:
             list[str]: CLI command arguments array for behave.
         """
+        import re
+
         cmd = ["uv", "run", "behave", "--color=always"]
         if self.extra_args:
             cmd.extend(self.extra_args)
         if self.nodes:
-            cmd.extend(self.nodes)
+            has_scenario = any("::" in n for n in self.nodes)
+            if not has_scenario:
+                cmd.extend(self.nodes)
+            else:
+                files_to_run = []
+                scenario_names = []
+                for n in self.nodes:
+                    if "::" in n:
+                        file_part, sname = n.split("::", 1)
+                        if file_part not in files_to_run:
+                            files_to_run.append(file_part)
+                        scenario_names.append(sname)
+                    else:
+                        if n not in files_to_run:
+                            files_to_run.append(n)
+                if scenario_names:
+                    regex = "^(" + "|".join(re.escape(s) for s in scenario_names) + ")$"
+                    cmd.extend(["-n", regex])
+                cmd.extend(files_to_run)
         return cmd
+
 
 

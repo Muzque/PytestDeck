@@ -43,21 +43,36 @@ class PytestDiscoveryService:
 
         # Handle Behave feature files discovery if suite is acceptance
         if "acceptance" in suite_rel_path or suite_rel_path.endswith(".feature"):
+            from infrastructure.test_detail_service import parse_gherkin_scenarios
+
             suite_dir = target_dir / suite_rel_path if suite_rel_path else target_dir
             collectors = []
             if suite_dir.exists():
                 feature_files = sorted(suite_dir.rglob("*.feature"))
                 for feat in feature_files:
                     rel_feat_path = str(feat.relative_to(target_dir))
-                    collectors.append({
-                        "nodeid": rel_feat_path,
-                        "result": [{
+                    scenarios = parse_gherkin_scenarios(feat)
+                    if scenarios:
+                        results = [
+                            {
+                                "nodeid": f"{rel_feat_path}::{sc['title']}",
+                                "type": "Function",
+                                "lineno": sc["line"],
+                            }
+                            for sc in scenarios
+                        ]
+                    else:
+                        results = [{
                             "nodeid": rel_feat_path,
                             "type": "Function",
-                            "lineno": 1
+                            "lineno": 1,
                         }]
+                    collectors.append({
+                        "nodeid": rel_feat_path,
+                        "result": results,
                     })
-            return collectors, len(collectors)
+            total_items = sum(len(c.get("result", [])) for c in collectors)
+            return collectors, total_items
 
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
             tmp_report = tmp.name

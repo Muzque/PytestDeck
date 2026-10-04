@@ -110,4 +110,65 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     // Run button should become visible again
     await expect(page.locator('.btn-primary')).toBeVisible({ timeout: 10000 })
   })
+
+  test('should display Detail Info tab when a single test method is selected in Integration suite', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Switch to Integration suite (index 1)
+    const select = page.locator('.suite-select')
+    await select.selectOption({ index: 1 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Detail tab should not be visible before selecting a test
+    await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
+
+    // Find and click the first test function row in the tree
+    const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
+    await expect(funcRow).toBeVisible({ timeout: 15000 })
+    await funcRow.click()
+
+    // The Detail Info tab should appear and become active
+    const detailTabBtn = page.locator('.tab-btn-detail')
+    await expect(detailTabBtn).toBeVisible()
+    await expect(detailTabBtn).toHaveClass(/active/)
+
+    // Detail Info tab pane should display test information and docstring section
+    await expect(page.locator('.detail-pane')).toBeVisible()
+    await expect(page.locator('.detail-title')).toBeVisible()
+    await expect(page.locator('.docstring-card')).toBeVisible()
+  })
+
+  test('should display Detail Info tab when a single scenario is selected in Behave acceptance suite', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Switch to Acceptance suite (index 2)
+    const select = page.locator('.suite-select')
+    await select.selectOption({ index: 2 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Detail tab should not be visible initially
+    await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
+
+    // Find and click the first scenario function row
+    const scenarioRow = page.locator('.node-row:has(.type-badge.function)').first()
+    await expect(scenarioRow).toBeVisible({ timeout: 15000 })
+    await scenarioRow.click()
+
+    // The Detail Info tab should appear and become active
+    const detailTabBtn = page.locator('.tab-btn-detail')
+    await expect(detailTabBtn).toBeVisible()
+    await expect(detailTabBtn).toHaveClass(/active/)
+
+    // Verify detail pane displays scenario badge, title, and steps or docstring
+    await expect(page.locator('.detail-pane')).toBeVisible()
+    await expect(page.locator('.badge-scenario')).toBeVisible()
+    await expect(page.locator('.detail-title')).toBeVisible()
+    await expect(page.locator('.docstring-card')).toBeVisible()
+
+    // Unselect and verify Detail tab disappears
+    await scenarioRow.click()
+    await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
+  })
 })
+
+

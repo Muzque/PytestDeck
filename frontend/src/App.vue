@@ -5,6 +5,7 @@ import TerminalView from './components/TerminalView.vue'
 import MetricsSummary from './components/MetricsSummary.vue'
 import RunHistory from './components/RunHistory.vue'
 import EnvLogModal from './components/EnvLogModal.vue'
+import TestDetailView from './components/TestDetailView.vue'
 import { useTestRunner } from './composables/useTestRunner'
 import { useTooltip } from './composables/useTooltip'
 
@@ -32,8 +33,13 @@ const {
   toggleSelectNode,
   runTests,
   stopTests,
-  selectHistoryItem
+  selectHistoryItem,
+  selectedTestDetail,
+  isLoadingDetail,
+  isDetailSuite,
+  singleSelectedNode
 } = useTestRunner()
+
 
 const { activeTooltip } = useTooltip()
 </script>
@@ -78,6 +84,15 @@ const { activeTooltip } = useTooltip()
             Terminal Output
           </button>
           <button 
+            v-if="isDetailSuite && singleSelectedNode"
+            class="tab-btn tab-btn-detail" 
+            :class="{ active: activeTab === 'detail' }"
+            @click="activeTab = 'detail'"
+          >
+            <span class="tab-indicator-dot"></span>
+            Detail Info
+          </button>
+          <button 
             class="tab-btn" 
             :class="{ active: activeTab === 'summary' }"
             @click="activeTab = 'summary'"
@@ -106,6 +121,15 @@ const { activeTooltip } = useTooltip()
             <TerminalView :logs="logs" />
           </div>
 
+          <!-- Detail Info Tab (for Integration & Behave suites) -->
+          <div v-show="activeTab === 'detail'" class="tab-pane detail-pane">
+            <TestDetailView 
+              :detail="selectedTestDetail" 
+              :isLoading="isLoadingDetail" 
+              @run-test="runTests"
+            />
+          </div>
+
           <!-- Metrics & Summary Tab -->
           <div v-show="activeTab === 'summary'" class="tab-pane summary-pane">
             <MetricsSummary :summary="summary" :exitCode="exitCode" />
@@ -128,6 +152,7 @@ const { activeTooltip } = useTooltip()
             />
           </div>
         </div>
+
       </main>
     </div>
 
