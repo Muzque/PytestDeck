@@ -1,4 +1,3 @@
-import pytest
 from infrastructure.history_db import HistoryDatabase
 
 

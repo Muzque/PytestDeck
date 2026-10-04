@@ -43,31 +43,30 @@ const {
   clearMethodOutput
 } = useTestRunner()
 
+import { useSidebarResize } from './composables/useSidebarResize'
 
-
+const { sidebarWidth, isResizing, startResizing } = useSidebarResize(480)
 const { activeTooltip } = useTooltip()
 </script>
 
 <template>
   <div class="deck-app">
-    <!-- Top Navigation Header -->
-    <Header
-      v-model:targetPath="targetPath"
-      v-model:activeSuite="activeSuite"
-      :availableSuites="availableSuites"
-      :isDiscovering="isDiscovering"
-      :isRunning="isRunning"
-      :envStatus="envStatus"
-      :selectedCount="selectedNodes.size"
-      @discover="discoverTests"
-      @run="runTests"
-      @stop="stopTests"
-      @open-env-logs="showEnvLogModal = true; fetchEnvLogs()"
-    />
+    <!-- Left-hand Sidebar: Appbar Controls + Test Explorer -->
+    <aside class="deck-sidebar" :style="{ width: sidebarWidth + 'px' }">
+      <Header
+        v-model:targetPath="targetPath"
+        v-model:activeSuite="activeSuite"
+        :availableSuites="availableSuites"
+        :isDiscovering="isDiscovering"
+        :isRunning="isRunning"
+        :envStatus="envStatus"
+        :selectedCount="selectedNodes.size"
+        @discover="discoverTests"
+        @run="runTests"
+        @stop="stopTests"
+        @open-env-logs="showEnvLogModal = true; fetchEnvLogs()"
+      />
 
-    <!-- Main Workspace Area -->
-    <div class="deck-body">
-      <!-- Left Sidebar: Test Explorer -->
       <TestExplorer
         :activeSuite="activeSuite"
         v-model:markerFilter="markerFilter"
@@ -77,9 +76,28 @@ const { activeTooltip } = useTooltip()
         @toggle-select="toggleSelectNode"
       />
 
-      <!-- Right Main: Tabbed Views -->
-      <main class="deck-main">
-        <div class="tabs-header">
+      <!-- Sidebar Footer: Run / Stop action pinned to bottom -->
+      <div class="sidebar-footer run-actions">
+        <button v-if="!isRunning" class="btn btn-primary" @click="runTests">
+          ▶ Run Selected ({{ selectedNodes.size }})
+        </button>
+        <button v-else class="btn btn-danger" @click="stopTests">
+          ⏹ Stop Execution
+        </button>
+      </div>
+
+      <!-- Drag handle to adjust sidebar width -->
+      <div 
+        class="sidebar-resizer" 
+        :class="{ 'is-active': isResizing }"
+        @mousedown.prevent="startResizing"
+        title="Drag to resize explorer sidebar (up to 1400px)"
+      ></div>
+    </aside>
+
+    <!-- Right Main: Full-Height Tabbed Views -->
+    <main class="deck-main">
+      <div class="tabs-header">
           <button 
             class="tab-btn" 
             :class="{ active: activeTab === 'live' }"
@@ -163,7 +181,6 @@ const { activeTooltip } = useTooltip()
         </div>
 
       </main>
-    </div>
 
     <!-- Floating Glass Tooltip -->
     <Teleport to="body">

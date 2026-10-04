@@ -83,12 +83,19 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
   test('should pass marker filter and extra flags to runner execution', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
 
-    // Enter marker and extra flags filters
-    const markerInput = page.locator('input[placeholder*="Marker"]')
-    const extraInput = page.locator('input[placeholder*="Extra flags"]')
+    // Open Run Options modal and enter marker and extra flags
+    await page.click('#btn-run-options')
+    const markerInput = page.locator('#run-options-marker')
+    const extraInput = page.locator('#run-options-extra')
+    await expect(markerInput).toBeVisible()
 
     await markerInput.fill('smoke')
     await extraInput.fill('-s')
+    await page.click('#run-options-apply')
+
+    // Modal closes and active options are summarized in the sidebar
+    await expect(markerInput).not.toBeVisible()
+    await expect(page.locator('.run-options-count')).toHaveText('2')
 
     // Click Run Selected
     await page.click('.btn-primary')

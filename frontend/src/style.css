@@ -118,41 +118,50 @@ select {
 /* Component Styles */
 .deck-app {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
   width: 100vw;
   background: var(--bg-app);
+  overflow: hidden;
 }
 
 .deck-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
   background: var(--bg-secondary);
   backdrop-filter: var(--glass-backdrop);
   -webkit-backdrop-filter: var(--glass-backdrop);
   border-bottom: 1px solid var(--border-color);
-  z-index: 10;
+  flex-shrink: 0;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.brand-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .brand-logo-img {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
 }
 
 .brand h1 {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-main);
   letter-spacing: -0.02em;
+  margin: 0;
 }
 
 .env-status-badge {
@@ -225,27 +234,34 @@ select {
 
 .target-controls {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  max-width: 650px;
-  margin: 0 20px;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
 }
 
 .path-input {
-  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   background: var(--bg-input);
   backdrop-filter: var(--glass-backdrop);
   border: 1px solid var(--border-color);
   color: var(--text-main);
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 0.88rem;
+  padding: 7px 11px;
+  border-radius: 7px;
+  font-size: 0.82rem;
 }
 
 .path-input:focus {
   border-color: var(--border-hover);
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.suite-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
 }
 
 .suite-select,
@@ -254,10 +270,20 @@ select {
   backdrop-filter: var(--glass-backdrop);
   border: 1px solid var(--border-color);
   color: var(--text-main);
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 0.88rem;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 0.82rem;
   cursor: pointer;
+}
+
+.suite-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.theme-select {
+  padding: 4px 8px;
+  font-size: 0.75rem;
 }
 
 .suite-select:hover,
@@ -267,16 +293,27 @@ select {
 
 .run-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  width: 100%;
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  box-sizing: border-box;
 }
 
 .run-actions .btn {
-  width: 180px;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
+  padding: 9px 16px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border-radius: 8px;
 }
 
 .btn {
@@ -336,22 +373,19 @@ select {
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
-.deck-body {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
 .deck-sidebar {
   position: relative;
-  min-width: 240px;
-  max-width: 800px;
+  min-width: 260px;
+  max-width: 1400px;
+  height: 100vh;
   background: var(--bg-secondary);
   backdrop-filter: var(--glass-backdrop);
   -webkit-backdrop-filter: var(--glass-backdrop);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .sidebar-resizer {
@@ -370,30 +404,40 @@ select {
   background: rgba(56, 189, 248, 0.4);
 }
 
+.explorer-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .sidebar-header {
-  padding: 14px 16px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .suite-tag {
   font-size: 0.75rem;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 12px;
   color: var(--accent-blue);
   font-weight: 600;
 }
 
 .filter-box {
-  padding: 12px 16px;
+  padding: 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .filter-input {
@@ -409,31 +453,96 @@ select {
   border-color: var(--border-hover);
 }
 
+.btn-run-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 7px 12px;
+  border-radius: 7px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.btn-run-options:hover {
+  border-color: var(--border-hover);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.btn-run-options.has-options {
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.run-options-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: var(--accent-blue);
+  color: #0b0f19;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.run-options-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.run-options-summary code {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.74rem;
+  color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+
 .tree-container {
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
   padding: 12px;
+  min-height: 0;
 }
 
 .deck-main {
   flex: 1;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  min-width: 0;
+  overflow: hidden;
   background: transparent;
 }
 
 .tabs-header {
+  height: 48px;
+  box-sizing: border-box;
   display: flex;
+  align-items: center;
   background: var(--bg-secondary);
   backdrop-filter: var(--glass-backdrop);
   -webkit-backdrop-filter: var(--glass-backdrop);
   border-bottom: 1px solid var(--border-color);
   padding: 0 10px;
+  flex-shrink: 0;
 }
 
 .tab-btn {
-  padding: 12px 22px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 20px;
   background: transparent;
   color: var(--text-muted);
   border-bottom: 2px solid transparent;

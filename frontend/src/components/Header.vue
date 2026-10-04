@@ -26,22 +26,30 @@ const { currentTheme, themes } = useTheme()
 <template>
   <header class="deck-header">
     <div class="brand">
-      <img src="/favicon.svg" alt="PytestDeck Logo" class="brand-logo-img" />
-      <h1>PytestDeck</h1>
-      <span 
-        class="env-status-badge" 
-        :class="'env-' + (envStatus?.status || 'ready')"
-        :title="(envStatus?.message || 'Target environment ready') + ' (Click to view logs)'"
-        role="button"
-        tabindex="0"
-        @click="emit('open-env-logs')"
-        @keydown.enter="emit('open-env-logs')"
-      >
-        <span class="status-dot"></span>
-        <span class="status-text">
-          {{ envStatus?.status === 'running' ? 'Preparing Env...' : (envStatus?.status === 'failed' ? 'Env Failed' : 'Ready') }}
+      <div class="brand-info">
+        <img src="/favicon.svg" alt="PytestDeck Logo" class="brand-logo-img" />
+        <h1>PytestDeck</h1>
+        <span 
+          class="env-status-badge" 
+          :class="'env-' + (envStatus?.status || 'ready')"
+          :title="(envStatus?.message || 'Target environment ready') + ' (Click to view logs)'"
+          role="button"
+          tabindex="0"
+          @click="emit('open-env-logs')"
+          @keydown.enter="emit('open-env-logs')"
+        >
+          <span class="status-dot"></span>
+          <span class="status-text">
+            {{ envStatus?.status === 'running' ? 'Preparing...' : (envStatus?.status === 'failed' ? 'Failed' : 'Ready') }}
+          </span>
         </span>
-      </span>
+      </div>
+
+      <select v-model="currentTheme" class="theme-select" title="Switch Theme">
+        <option v-for="t in themes" :key="t.id" :value="t.id">
+          {{ t.label }}
+        </option>
+      </select>
     </div>
 
     <div class="target-controls">
@@ -50,35 +58,24 @@ const { currentTheme, themes } = useTheme()
         type="text" 
         class="path-input" 
         placeholder="Target Repo Path..."
+        title="Target Repository Root Path"
         @input="emit('update:targetPath', $event.target.value)"
       />
-      <select 
-        :value="activeSuite" 
-        class="suite-select" 
-        @change="emit('update:activeSuite', $event.target.value); emit('discover')"
-      >
-        <option v-for="s in availableSuites" :key="s.path" :value="s.path">
-          {{ s.label }}
-        </option>
-      </select>
-      <button class="btn btn-secondary" :disabled="isDiscovering" @click="emit('discover')">
-        {{ isDiscovering ? 'Scanning...' : 'Refresh Tree' }}
-      </button>
-    </div>
-
-    <div class="run-actions">
-      <select v-model="currentTheme" class="theme-select" title="Switch Theme">
-        <option v-for="t in themes" :key="t.id" :value="t.id">
-          {{ t.label }}
-        </option>
-      </select>
-
-      <button v-if="!isRunning" class="btn btn-primary" @click="emit('run')">
-        ▶ Run Selected ({{ selectedCount }})
-      </button>
-      <button v-else class="btn btn-danger" @click="emit('stop')">
-        ⏹ Stop Execution
-      </button>
+      <div class="suite-control-row">
+        <select 
+          :value="activeSuite" 
+          class="suite-select" 
+          title="Select Active Test Suite"
+          @change="emit('update:activeSuite', $event.target.value); emit('discover')"
+        >
+          <option v-for="s in availableSuites" :key="s.path" :value="s.path">
+            {{ s.label }}
+          </option>
+        </select>
+        <button class="btn btn-secondary" :disabled="isDiscovering" @click="emit('discover')" title="Refresh Test Tree">
+          {{ isDiscovering ? 'Scanning...' : 'Refresh Tree' }}
+        </button>
+      </div>
     </div>
   </header>
 </template>
