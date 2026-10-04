@@ -124,7 +124,11 @@ class PytestConfig(BaseExecutionConfig):
         Returns:
             list[str]: CLI command arguments array for pytest.
         """
-        cmd = ["uv", "run", "--no-sync", "pytest", "-v", "--color=yes"]
+        cmd = ["uv", "run"]
+        if self.report_json_path:
+            # Inject the plugin so target repos don't need it in their lockfile
+            cmd.extend(["--with", "pytest-json-report"])
+        cmd.extend(["pytest", "-v", "--color=yes"])
         if self.report_json_path:
             cmd.extend(["--json-report", f"--json-report-file={self.report_json_path}"])
         if self.marker:
@@ -146,7 +150,7 @@ class BehaveConfig(BaseExecutionConfig):
         Returns:
             list[str]: CLI command arguments array for behave.
         """
-        cmd = ["uv", "run", "--no-sync", "behave", "--color=always"]
+        cmd = ["uv", "run", "behave", "--color=always"]
         if self.extra_args:
             cmd.extend(self.extra_args)
         if self.nodes:

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from domain.models import BehaveConfig, PytestConfig, RunnerType
 from domain.services import is_safe_subpath
+from infrastructure.env_status import apply_target_venv, ensure_target_env_ready
 
 
 class SubprocessRunnerService:
@@ -58,6 +59,8 @@ class SubprocessRunnerService:
         Yields:
             AsyncGenerator[str, None]: JSON-serialized streaming message chunks (status, stdout, finished).
         """
+        ensure_target_env_ready()
+
         if nodes:
             for node in nodes:
                 if not is_safe_subpath(self.target_path, node):
@@ -82,7 +85,7 @@ class SubprocessRunnerService:
         env["PYTHONUNBUFFERED"] = "1"
         env["PY_COLORS"] = "1"
         env["FORCE_COLOR"] = "1"
-        env["UV_NO_SYNC"] = "1"
+        apply_target_venv(env)
 
         # Ensure target repository root is on PYTHONPATH
         src_paths = [str(self.target_path)]

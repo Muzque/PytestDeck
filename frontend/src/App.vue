@@ -4,6 +4,7 @@ import TestExplorer from './components/TestExplorer.vue'
 import TerminalView from './components/TerminalView.vue'
 import MetricsSummary from './components/MetricsSummary.vue'
 import RunHistory from './components/RunHistory.vue'
+import EnvLogModal from './components/EnvLogModal.vue'
 import { useTestRunner } from './composables/useTestRunner'
 import { useTooltip } from './composables/useTooltip'
 
@@ -13,6 +14,10 @@ const {
   availableSuites,
   isDiscovering,
   isRunning,
+  envStatus,
+  envLogs,
+  showEnvLogModal,
+  fetchEnvLogs,
   testTree,
   selectedNodes,
   activeTab,
@@ -42,10 +47,12 @@ const { activeTooltip } = useTooltip()
       :availableSuites="availableSuites"
       :isDiscovering="isDiscovering"
       :isRunning="isRunning"
+      :envStatus="envStatus"
       :selectedCount="selectedNodes.size"
       @discover="discoverTests"
       @run="runTests"
       @stop="stopTests"
+      @open-env-logs="showEnvLogModal = true; fetchEnvLogs()"
     />
 
     <!-- Main Workspace Area -->
@@ -142,5 +149,14 @@ const { activeTooltip } = useTooltip()
         </div>
       </div>
     </Teleport>
+
+    <!-- Target Environment Logs Modal -->
+    <EnvLogModal 
+      :show="showEnvLogModal" 
+      :envStatus="envStatus" 
+      :logs="envLogs" 
+      @close="showEnvLogModal = false" 
+      @refresh="fetchEnvLogs" 
+    />
   </div>
 </template>

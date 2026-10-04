@@ -16,7 +16,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
   test('should discover test tree and allow node selection', async ({ page }) => {
     await expect(page.locator('.deck-sidebar')).toBeVisible()
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
     
     const treeRows = page.locator('.node-row')
     await expect(treeRows.first()).toBeVisible()
@@ -27,21 +27,21 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
   })
 
   test('should switch test suites between unit, integration, and behave acceptance', async ({ page }) => {
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
     
     const select = page.locator('.suite-select')
     
     // Switch to Integration suite (index 1)
     await select.selectOption({ index: 1 })
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
 
     // Switch to Acceptance suite (index 2)
     await select.selectOption({ index: 2 })
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
   })
 
   test('should run tests and update execution metrics & history', async ({ page }) => {
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
     
     // Click Run Selected button
     const runBtn = page.locator('.btn-primary')
@@ -67,7 +67,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
   })
 
   test('should display raw JSON report tab after execution', async ({ page }) => {
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
     await page.click('.btn-primary')
     
     // Wait for run to finish
@@ -81,7 +81,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
   })
 
   test('should pass marker filter and extra flags to runner execution', async ({ page }) => {
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
 
     // Enter marker and extra flags filters
     const markerInput = page.locator('input[placeholder*="Marker"]')
@@ -96,7 +96,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
   })
 
   test('should handle stop execution action cleanly', async ({ page }) => {
-    await page.waitForSelector('.tree-container', { timeout: 10000 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
     
     // Start test execution
     await page.click('.btn-primary')

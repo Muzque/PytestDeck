@@ -4,6 +4,8 @@ import os
 import tempfile
 from typing import Any
 
+from infrastructure.env_status import apply_target_venv, ensure_target_env_ready
+
 
 def get_env_config() -> dict[str, Any]:
     """Retrieves PytestDeck configuration values from environment variables.
@@ -37,6 +39,7 @@ class PytestDiscoveryService:
         from domain.services import resolve_target_path
 
         target_dir = resolve_target_path(target_path)
+        ensure_target_env_ready()
 
         # Handle Behave feature files discovery if suite is acceptance
         if "acceptance" in suite_rel_path or suite_rel_path.endswith(".feature"):
@@ -61,7 +64,7 @@ class PytestDiscoveryService:
 
         try:
             cmd = [
-                "uv", "run", "--no-sync", "pytest", "--collect-only",
+                "uv", "run", "--with", "pytest-json-report", "pytest", "--collect-only",
                 "--json-report", f"--json-report-file={tmp_report}",
                 "--disable-warnings"
             ]
@@ -76,7 +79,7 @@ class PytestDiscoveryService:
 
             env = dict(os.environ)
             env["PYTHONUNBUFFERED"] = "1"
-            env["UV_NO_SYNC"] = "1"
+            apply_target_venv(env)
 
             src_paths = [str(target_dir)]
             existing_pythonpath = env.get("PYTHONPATH", "")

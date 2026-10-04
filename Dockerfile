@@ -49,6 +49,11 @@ ENV PORT=9388
 ENV PATH="/app/backend/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/backend/src"
 
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 WORKDIR /app/backend
 
-CMD ["uv", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9388"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9388"]

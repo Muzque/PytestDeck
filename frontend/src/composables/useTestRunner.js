@@ -55,6 +55,7 @@ export function useTestRunner() {
       testTree.value = data.tree
     } catch (err) {
       console.error(err)
+      appendLog(`\x1b[1;33mDiscovery: ${err.message}\x1b[0m\r\n`)
       testTree.value = null
     } finally {
       isDiscovering.value = false
@@ -189,6 +190,80 @@ export function useTestRunner() {
     activeTab.value = 'live'
   }
 
+  const envStatus = ref({ ready: true, status: 'ready', message: '' })
+  const envLogs = ref('')
+  const showEnvLogModal = ref(false)
+  let healthPollTimer = null
+  let lastSeenLogOffset = 0
+
+  const fetchEnvLogs = async () => {
+    try {
+      const res = await fetch('/api/health/logs?tail=500')
+      if (res.ok) {
+        const data = await res.json()
+        envLogs.value = data.logs || ''
+      }
+    } catch {
+      // Ignore transient network errors
+    }
+  }
+
+  const checkHealth = async () => {
+    try {
+      const res = await fetch('/api/health')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.environment) {
+          const wasNotReady = !envStatus.value.ready
+          envStatus.value = data.environment
+
+          // Stream live preparation logs to terminal if available
+          if (data.environment.status === 'running') {
+            if (data.environment.recent_logs) {
+              const fullText = data.environment.recent_logs
+              if (fullText.length > lastSeenLogOffset) {
+                const newChunk = fullText.slice(lastSeenLogOffset)
+                lastSeenLogOffset = fullText.length
+                const lines = newChunk.split('\n')
+                for (const line of lines) {
+                  if (line.trim()) {
+                    appendLog(`\x1b[90m[uv sync]\x1b[0m ${line}\r\n`)
+                  }
+                }
+              }
+              envLogs.value = fullText
+            }
+            if (showEnvLogModal.value) {
+              fetchEnvLogs()
+            }
+          }
+
+          if (wasNotReady && envStatus.value.ready) {
+            appendLog('\x1b[1;32m[PytestDeck] Target environment is ready. Discovering tests...\x1b[0m\r\n')
+            fetchEnvLogs()
+            discoverTests()
+          } else if (wasNotReady && data.environment.status === 'failed') {
+            appendLog(`\x1b[1;31m[PytestDeck] ${data.environment.message}\x1b[0m\r\n`)
+            fetchEnvLogs()
+          }
+        }
+      }
+    } catch {
+      // Ignore transient network errors
+    }
+  }
+
+  const startHealthPolling = () => {
+    if (healthPollTimer) return
+    healthPollTimer = setInterval(async () => {
+      await checkHealth()
+      if (envStatus.value.ready || envStatus.value.status === 'failed') {
+        clearInterval(healthPollTimer)
+        healthPollTimer = null
+      }
+    }, 2000)
+  }
+
   const fetchConfig = async () => {
     try {
       const res = await fetch('/api/config')
@@ -209,7 +284,15 @@ export function useTestRunner() {
     } catch {
       // Keep default if config fetch fails
     }
-    discoverTests()
+
+    await checkHealth()
+    await fetchEnvLogs()
+    if (!envStatus.value.ready && envStatus.value.status === 'running') {
+      appendLog(`\x1b[1;33m[PytestDeck] ${envStatus.value.message}\x1b[0m\r\n`)
+      startHealthPolling()
+    } else {
+      discoverTests()
+    }
   }
 
   onMounted(() => {
@@ -222,6 +305,7 @@ export function useTestRunner() {
     availableSuites,
     isDiscovering,
     isRunning,
+    envStatus,
     testTree,
     selectedNodes,
     activeTab,
@@ -236,6 +320,9 @@ export function useTestRunner() {
     toggleSelectNode,
     runTests,
     stopTests,
-    selectHistoryItem
+    selectHistoryItem,
+    envLogs,
+    showEnvLogModal,
+    fetchEnvLogs
   }
 }

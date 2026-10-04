@@ -13,9 +13,29 @@ services:
       - INTEGRATION_DIR=${INTEGRATION_DIR:-backend/tests/integration}
       - ACCEPTANCE_DIR=${ACCEPTANCE_DIR:-backend/tests/acceptance}
       - PORT=${PORT:-9388}
-      - UV_NO_SYNC=1
+      # Target repo's Linux virtualenv, uv cache and Python installs live on a
+      # persistent volume so redeploys don't re-download everything.
+      # (The host's .venv can't be reused: it's built for macOS.)
+      # PYTESTDECK_TARGET_VENV is applied only to target commands (as
+      # UV_PROJECT_ENVIRONMENT), never to PytestDeck's own environment.
+      - PYTESTDECK_TARGET_VENV=/cache/target_venv
+      - UV_CACHE_DIR=/cache/uv
+      - UV_PYTHON_INSTALL_DIR=/cache/python
+      - UV_LINK_MODE=copy
+      - PYTESTDECK_ENV_STATUS_FILE=/cache/env_status
+      - PYTESTDECK_ENV_SYNC_LOG=/cache/env_sync.log
     volumes:
       - ${TARGET_REPO:-.}:/target
+      - pytestdeck_cache:/cache
     ports:
       - "${PORT:-9388}:9388"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:9388/api/health/ready').getcode() == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
     restart: unless-stopped
+
+volumes:
+  pytestdeck_cache:
