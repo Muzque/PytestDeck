@@ -197,6 +197,14 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
     // Verify status badge appears
     await expect(page.locator('.run-status-badge')).toBeVisible()
+
+    // Verify Clear button is visible and clears output
+    const clearBtn = page.locator('.btn-clear-output')
+    await expect(clearBtn).toBeVisible()
+    await clearBtn.click()
+
+    // Verify output cleared back to empty state
+    await expect(page.locator('.method-terminal-empty')).toBeVisible()
   })
 })
 

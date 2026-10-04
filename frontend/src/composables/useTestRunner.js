@@ -86,6 +86,86 @@ export function useTestRunner() {
     console.error('Failed to parse cached method outputs', e)
   }
 
+  const loadStoredMethodOutputs = async () => {
+    try {
+      const url = targetPath.value ? `/api/test-runs?target_path=${encodeURIComponent(targetPath.value)}` : '/api/test-runs'
+      const res = await fetch(url)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.runs) {
+          methodOutputs.value = {
+            ...methodOutputs.value,
+            ...data.runs,
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load runs from server SQLite database', e)
+    }
+  }
+
+  loadStoredMethodOutputs()
+
+  const clearMethodOutput = async (nodeId) => {
+    if (!nodeId) return
+    try {
+      await fetch('/api/test-runs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPath.value || '',
+          node_id: nodeId
+        })
+      })
+    } catch (e) {
+      console.error('Failed to delete run from server', e)
+    }
+
+    const updated = { ...methodOutputs.value }
+    delete updated[nodeId]
+    for (const key of Object.keys(updated)) {
+      if (key.endsWith(nodeId) || nodeId.endsWith(key)) {
+        delete updated[key]
+      }
+    }
+    methodOutputs.value = updated
+    try {
+      localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
+    } catch {
+      // Ignore storage errors
+    }
+
+    // Also update selectedTestDetail if active
+    if (selectedTestDetail.value && selectedTestDetail.value.node_id === nodeId) {
+      selectedTestDetail.value.latest_run = null
+      selectedTestDetail.value.modified_since_run = false
+    }
+  }
+
+  const clearAllMethodOutputs = async () => {
+    try {
+      await fetch('/api/test-runs', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPath.value || ''
+        })
+      })
+    } catch (e) {
+      console.error('Failed to clear runs from server', e)
+    }
+    methodOutputs.value = {}
+    try {
+      localStorage.removeItem('pytestdeck_method_outputs')
+    } catch {
+      // Ignore storage errors
+    }
+    if (selectedTestDetail.value) {
+      selectedTestDetail.value.latest_run = null
+      selectedTestDetail.value.modified_since_run = false
+    }
+  }
+
   const getMethodOutput = (nodeId) => {
     if (!nodeId) return null
     if (methodOutputs.value[nodeId]) return methodOutputs.value[nodeId]
@@ -171,6 +251,23 @@ export function useTestRunner() {
       }
       const data = await res.json()
       testTree.value = data.tree
+
+      if (data.tree) {
+        const idSet = new Set()
+        collectAllChildIds(data.tree, idSet)
+        try {
+          fetch('/api/test-runs/prune', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              target_path: targetPath.value || '',
+              valid_nodes: Array.from(idSet)
+            })
+          }).catch(() => {})
+        } catch {
+          // Ignore network errors during prune
+        }
+      }
     } catch (err) {
       console.error(err)
       appendLog(`\x1b[1;33mDiscovery: ${err.message}\x1b[0m\r\n`)
@@ -480,7 +577,9 @@ export function useTestRunner() {
     methodOutputs,
     currentMethodOutput,
     runSingleMethod,
-    getMethodOutput
+    getMethodOutput,
+    clearMethodOutput,
+    clearAllMethodOutputs
   }
 }
 

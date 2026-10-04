@@ -132,6 +132,19 @@ class SubprocessRunnerService:
 
         method_outputs = output_collector.get_results()
 
+        # Persist method outputs to SQLite database with code_hash and file_mtime
+        try:
+            from infrastructure.history_db import HistoryDatabase
+            from infrastructure.test_detail_service import get_node_code_metadata
+            db = HistoryDatabase(target_path=self.target_path)
+            for nid, record in method_outputs.items():
+                code_hash, file_mtime = get_node_code_metadata(self.target_path, nid)
+                record["code_hash"] = code_hash
+                record["file_mtime"] = file_mtime
+            db.save_runs(method_outputs)
+        except Exception:
+            pass
+
         yield json.dumps({
             "type": "finished",
             "exit_code": exit_code,

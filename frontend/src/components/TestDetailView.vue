@@ -21,7 +21,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['run-test', 'run-single-method'])
+defineEmits(['run-test', 'run-single-method', 'clear-single-output'])
 
 const copied = ref(false)
 
@@ -231,9 +231,25 @@ const copyNodeId = async () => {
             <span v-if="latestRun && latestRun.timestamp" class="run-meta-pill">
               🕒 {{ latestRun.timestamp }}
             </span>
+            <span 
+              v-if="latestRun && detail.modified_since_run" 
+              class="run-meta-pill modified-badge"
+              title="Test code has been modified after this run output was recorded"
+            >
+              ⚠️ Code Modified
+            </span>
           </div>
 
           <div class="run-actions">
+            <button 
+              v-if="latestRun && latestRun.output" 
+              class="btn-clear-output"
+              @click="$emit('clear-single-output', detail.node_id)"
+              title="Clear stored run output for this test method"
+            >
+              🗑️ Clear
+            </button>
+
             <button 
               v-if="latestRun && latestRun.output" 
               class="btn-copy-output"
@@ -761,10 +777,41 @@ export default {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+.modified-badge {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .run-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.btn-clear-output {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-clear-output:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ffffff;
 }
 
 .btn-copy-output {

@@ -39,7 +39,8 @@ const {
   isDetailSuite,
   singleSelectedNode,
   currentMethodOutput,
-  runSingleMethod
+  runSingleMethod,
+  clearMethodOutput
 } = useTestRunner()
 
 
@@ -133,6 +134,7 @@ const { activeTooltip } = useTooltip()
               :isRunning="isRunning"
               @run-test="runTests"
               @run-single-method="runSingleMethod"
+              @clear-single-output="clearMethodOutput"
             />
           </div>
 
