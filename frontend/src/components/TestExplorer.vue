@@ -8,13 +8,19 @@ const props = defineProps({
   markerFilter: { type: String, default: '' },
   extraArgs: { type: String, default: '' },
   testTree: { type: Object, default: null },
-  selectedNodes: { type: Object, required: true }
+  selectedNodes: { type: Object, required: true },
+  selectedCount: { type: Number, default: 0 },
+  isRunning: { type: Boolean, default: false },
+  isDiscovering: { type: Boolean, default: false }
 })
 
 const emit = defineEmits([
   'update:markerFilter',
   'update:extraArgs',
-  'toggle-select'
+  'toggle-select',
+  'discover',
+  'run',
+  'stop'
 ])
 
 const showRunOptions = ref(false)
@@ -26,27 +32,87 @@ const activeOptionCount = computed(() =>
 
 <template>
   <div class="explorer-section">
-    <div class="sidebar-header">
-      <h3>Test Explorer</h3>
-      <span class="suite-tag">{{ activeSuite }}</span>
-    </div>
-
-    <div class="filter-box">
+    <!-- Unified Action Toolbar: Run Selected, Refresh, and Run Options -->
+    <div class="explorer-toolbar">
       <button
-        id="btn-run-options"
-        class="btn-run-options"
-        :class="{ 'has-options': activeOptionCount > 0 }"
-        title="Configure marker expression and extra flags"
-        @click="showRunOptions = true"
+        v-if="!isRunning"
+        class="btn btn-primary btn-run-selected"
+        @click="emit('run')"
+        title="Run Selected Tests"
       >
-        <span>⚙️ Run Options</span>
-        <span v-if="activeOptionCount" class="run-options-count">{{ activeOptionCount }}</span>
+        <span class="btn-icon">▶</span>
+        <span class="btn-label">Run Selected ({{ selectedCount }})</span>
+      </button>
+      <button
+        v-else
+        class="btn btn-danger btn-run-selected"
+        @click="emit('stop')"
+        title="Stop Execution"
+      >
+        <span class="btn-icon">⏹</span>
+        <span class="btn-label">Stop Execution</span>
       </button>
 
-      <div v-if="activeOptionCount" class="run-options-summary">
-        <code v-if="markerFilter" :title="markerFilter">-m {{ markerFilter }}</code>
-        <code v-if="extraArgs" :title="extraArgs">{{ extraArgs }}</code>
+      <div class="toolbar-actions">
+        <button
+          class="btn-icon-action btn-refresh"
+          :disabled="isDiscovering"
+          @click="emit('discover')"
+          title="Refresh Test Tree"
+        >
+          <span class="icon-refresh" :class="{ 'is-spinning': isDiscovering }">🔄</span>
+        </button>
+
+        <button
+          id="btn-run-options"
+          class="btn-icon-action btn-run-options"
+          :class="{ 'has-options': activeOptionCount > 0 }"
+          title="Configure Run Options (-m markers, extra flags)"
+          @click="showRunOptions = true"
+        >
+          <span>⚙️</span>
+          <span v-if="activeOptionCount" class="run-options-count">{{ activeOptionCount }}</span>
+        </button>
       </div>
+    </div>
+
+    <!-- Active Run Options Summary (compact strip below toolbar) -->
+    <div v-if="activeOptionCount" class="run-options-summary">
+      <div class="summary-chips">
+        <span
+          v-if="markerFilter"
+          class="summary-chip"
+          title="Click to edit marker"
+          @click="showRunOptions = true"
+        >
+          <code>-m {{ markerFilter }}</code>
+          <button
+            class="chip-remove"
+            title="Remove marker"
+            @click.stop="emit('update:markerFilter', '')"
+          >×</button>
+        </span>
+
+        <span
+          v-if="extraArgs"
+          class="summary-chip"
+          title="Click to edit flags"
+          @click="showRunOptions = true"
+        >
+          <code>{{ extraArgs }}</code>
+          <button
+            class="chip-remove"
+            title="Remove extra flags"
+            @click.stop="emit('update:extraArgs', '')"
+          >×</button>
+        </span>
+      </div>
+
+      <button
+        class="btn-clear-all"
+        title="Clear all options"
+        @click="emit('update:markerFilter', ''); emit('update:extraArgs', '')"
+      >Clear</button>
     </div>
 
     <div v-if="testTree" class="tree-container">

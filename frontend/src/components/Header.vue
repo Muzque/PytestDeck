@@ -5,9 +5,6 @@ defineProps({
   targetPath: { type: String, required: true },
   activeSuite: { type: String, required: true },
   availableSuites: { type: Array, required: true },
-  isDiscovering: { type: Boolean, default: false },
-  isRunning: { type: Boolean, default: false },
-  selectedCount: { type: Number, default: 0 },
   envStatus: { type: Object, default: () => ({ ready: true, status: 'ready', message: '' }) }
 })
 
@@ -15,8 +12,6 @@ const emit = defineEmits([
   'update:targetPath',
   'update:activeSuite',
   'discover',
-  'run',
-  'stop',
   'open-env-logs'
 ])
 
@@ -72,9 +67,6 @@ const { currentTheme, themes } = useTheme()
             {{ s.label }}
           </option>
         </select>
-        <button class="btn btn-secondary" :disabled="isDiscovering" @click="emit('discover')" title="Refresh Test Tree">
-          {{ isDiscovering ? 'Scanning...' : 'Refresh Tree' }}
-        </button>
       </div>
     </div>
   </header>

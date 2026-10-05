@@ -57,34 +57,25 @@ const { activeTooltip } = useTooltip()
         v-model:targetPath="targetPath"
         v-model:activeSuite="activeSuite"
         :availableSuites="availableSuites"
-        :isDiscovering="isDiscovering"
-        :isRunning="isRunning"
         :envStatus="envStatus"
-        :selectedCount="selectedNodes.size"
         @discover="discoverTests"
-        @run="runTests"
-        @stop="stopTests"
         @open-env-logs="showEnvLogModal = true; fetchEnvLogs()"
       />
 
       <TestExplorer
         :activeSuite="activeSuite"
+        :isDiscovering="isDiscovering"
+        :isRunning="isRunning"
+        :selectedCount="selectedNodes.size"
         v-model:markerFilter="markerFilter"
         v-model:extraArgs="extraArgs"
         :testTree="testTree"
         :selectedNodes="selectedNodes"
         @toggle-select="toggleSelectNode"
+        @discover="discoverTests"
+        @run="runTests"
+        @stop="stopTests"
       />
-
-      <!-- Sidebar Footer: Run / Stop action pinned to bottom -->
-      <div class="sidebar-footer run-actions">
-        <button v-if="!isRunning" class="btn btn-primary" @click="runTests">
-          ▶ Run Selected ({{ selectedNodes.size }})
-        </button>
-        <button v-else class="btn btn-danger" @click="stopTests">
-          ⏹ Stop Execution
-        </button>
-      </div>
 
       <!-- Drag handle to adjust sidebar width -->
       <div 
