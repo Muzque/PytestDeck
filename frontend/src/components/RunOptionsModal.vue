@@ -104,19 +104,21 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
+  background: var(--bg-modal-overlay, rgba(0, 0, 0, 0.55));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   animation: ro-fade 0.18s ease-out;
 }
 
 .ro-card {
   width: 100%;
   max-width: 520px;
-  background: var(--bg-card);
+  background: var(--bg-modal, var(--bg-card));
   backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--border-color);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--border-modal, var(--border-color));
   border-radius: var(--glass-border-radius);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-modal, 0 20px 50px rgba(0, 0, 0, 0.5));
   overflow: hidden;
   animation: ro-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -127,6 +129,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-modal-header, rgba(255, 255, 255, 0.03));
 }
 
 .ro-title-wrap {
@@ -156,6 +159,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   font-size: 1.1rem;
   padding: 4px 8px;
   border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .ro-close:hover {
@@ -204,6 +209,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 
 .ro-hint code {
   background: var(--bg-input);
+  border: 1px solid var(--border-color);
   padding: 1px 5px;
   border-radius: 4px;
 }
@@ -218,6 +224,62 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 .ro-footer-right {
   display: flex;
   gap: 8px;
+}
+
+/* Light Theme (Apple Glass Light) Overrides */
+:global([data-theme="apple-glass-light"]) .ro-overlay {
+  background: rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+:global([data-theme="apple-glass-light"]) .ro-card {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 1);
+}
+
+:global([data-theme="apple-glass-light"]) .ro-header {
+  background: rgba(248, 250, 252, 0.85);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+:global([data-theme="apple-glass-light"]) .ro-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #0f172a;
+}
+
+:global([data-theme="apple-glass-light"]) .ro-input {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+:global([data-theme="apple-glass-light"]) .ro-input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+:global([data-theme="apple-glass-light"]) .ro-hint code {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #0284c7;
+}
+
+:global([data-theme="apple-glass-light"]) .btn-secondary {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme="apple-glass-light"]) .btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
 }
 
 @keyframes ro-fade {
