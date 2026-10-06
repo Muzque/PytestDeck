@@ -60,6 +60,13 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     // Wait for execution completion (Run button returns to non-running state)
     await expect(runBtn).toBeVisible({ timeout: 15000 })
 
+    // Verify Copy Output button is enabled and clickable
+    const copyBtn = page.locator('.btn-copy-terminal')
+    await expect(copyBtn).toBeVisible()
+    await expect(copyBtn).toBeEnabled()
+    await copyBtn.click()
+    await expect(copyBtn).toHaveClass(/active/)
+
     // Switch to Metrics & Summary tab
     await page.click('button:has-text("Metrics & Summary")')
     await expect(page.locator('.card-exit')).toBeVisible()

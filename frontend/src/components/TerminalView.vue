@@ -36,6 +36,41 @@ const filterSessionLogs = (allLogs) => {
   return allLogs.slice(idx)
 }
 
+const copied = ref(false)
+
+// eslint-disable-next-line no-control-regex
+const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
+
+const stripAnsi = (str) => {
+  if (!str) return ''
+  return str.replace(ANSI_REGEX, '')
+}
+
+const copyOutput = async () => {
+  const displayLogs = filterSessionLogs(props.logs)
+  if (!displayLogs || displayLogs.length === 0) return
+  const rawText = displayLogs.join('')
+  const cleanText = stripAnsi(rawText)
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(cleanText)
+    } else {
+      const el = document.createElement('textarea')
+      el.value = cleanText
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy terminal output:', err)
+  }
+}
+
 const applyTerminalTheme = (themeId) => {
   if (!term) return
   const themeObj = TERMINAL_THEMES[themeId] || TERMINAL_THEMES['apple-dark']
@@ -181,6 +216,16 @@ watch(currentTerminalTheme, (newThemeId) => {
         <span class="terminal-title">Terminal Output</span>
       </div>
       <div class="terminal-actions">
+        <button
+          class="btn-copy-terminal"
+          :class="{ active: copied }"
+          :disabled="!props.logs || props.logs.length === 0"
+          @click="copyOutput"
+          title="Copy all terminal output"
+        >
+          <span v-if="copied">✓ Copied</span>
+          <span v-else>📋 Copy Output</span>
+        </button>
         <select v-model="currentTerminalTheme" class="term-theme-select" title="Terminal Color Theme">
           <option v-for="tt in terminalThemes" :key="tt.id" :value="tt.id">
             {{ tt.label }}
@@ -237,6 +282,44 @@ watch(currentTerminalTheme, (newThemeId) => {
   font-weight: 600;
   color: var(--text-muted);
   margin-left: 6px;
+}
+
+.terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-copy-terminal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-copy-terminal:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: #fff;
+}
+
+.btn-copy-terminal:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-copy-terminal.active {
+  background: rgba(39, 201, 63, 0.15);
+  border-color: #27c93f;
+  color: #27c93f;
 }
 
 .term-theme-select {
