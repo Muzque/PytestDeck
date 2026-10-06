@@ -18,6 +18,11 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('.deck-sidebar')).toBeVisible()
     await page.waitForSelector('.tree-container', { timeout: 60000 })
     
+    // Verify file nodes are collapsed by default
+    const fileRow = page.locator('.node-row:has(.type-badge.file)').first()
+    await expect(fileRow).toBeVisible()
+    await expect(fileRow.locator('.toggle-icon')).toHaveText('▶')
+
     const treeRows = page.locator('.node-row')
     await expect(treeRows.first()).toBeVisible()
     
@@ -129,6 +134,11 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     // Detail tab should not be visible before selecting a test
     await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
 
+    // Expand the first file node to reveal its test methods
+    const fileToggle = page.locator('.node-row:has(.type-badge.file) .toggle-icon').first()
+    await expect(fileToggle).toBeVisible({ timeout: 15000 })
+    await fileToggle.click()
+
     // Find and click the first test function row in the tree
     const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
     await expect(funcRow).toBeVisible({ timeout: 15000 })
@@ -155,6 +165,11 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
     // Detail tab should not be visible initially
     await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
+
+    // Expand the first feature file node to reveal its scenarios
+    const fileToggle = page.locator('.node-row:has(.type-badge.file) .toggle-icon').first()
+    await expect(fileToggle).toBeVisible({ timeout: 15000 })
+    await fileToggle.click()
 
     // Find and click the first scenario function row
     const scenarioRow = page.locator('.node-row:has(.type-badge.function)').first()
@@ -184,6 +199,11 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     const select = page.locator('.suite-select')
     await select.selectOption({ index: 1 })
     await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Expand the first file node to reveal its test methods
+    const fileToggle = page.locator('.node-row:has(.type-badge.file) .toggle-icon').first()
+    await expect(fileToggle).toBeVisible({ timeout: 15000 })
+    await fileToggle.click()
 
     // Select a test method
     const funcRow = page.locator('.node-row:has(.type-badge.function)').first()

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useTooltip } from '../composables/useTooltip'
 
 const props = defineProps({
@@ -11,7 +11,14 @@ const emit = defineEmits(['toggle-select'])
 
 const { showTooltip, hideTooltip } = useTooltip()
 
-const isOpen = ref(true)
+const isOpen = ref(props.node.type !== 'file' && props.node.type !== 'fil')
+
+watch(
+  () => props.node.id,
+  () => {
+    isOpen.value = props.node.type !== 'file' && props.node.type !== 'fil'
+  }
+)
 
 const isChecked = computed(() => {
   return props.selectedNodes.has(props.node.id)
