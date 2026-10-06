@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from domain.services import resolve_target_path
+from infrastructure.storage_service import get_target_storage_dir
 
 
 class HistoryDatabase:
@@ -18,23 +18,15 @@ class HistoryDatabase:
             if custom_env:
                 self.db_path = Path(custom_env)
             else:
-                target_dir = resolve_target_path(str(target_path) if target_path else "")
-                storage_dir = target_dir / ".pytestdeck"
+                storage_dir = get_target_storage_dir(target_path)
                 self.db_path = storage_dir / "history.db"
 
         self._ensure_storage_dir()
         self._init_db()
 
     def _ensure_storage_dir(self) -> None:
-        """Ensures parent directory and a local .gitignore exist so history files are not tracked by git."""
-        parent = self.db_path.parent
-        parent.mkdir(parents=True, exist_ok=True)
-        gitignore = parent / ".gitignore"
-        if not gitignore.exists():
-            try:
-                gitignore.write_text("*\n", encoding="utf-8")
-            except Exception:
-                pass
+        """Ensures parent directory exists."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)

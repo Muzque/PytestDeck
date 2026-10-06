@@ -221,3 +221,6 @@ __marimo__/
 test-results/
 playwright-report/
 
+# PytestDeck local storage
+.pytestdeck/
+

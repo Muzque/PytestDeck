@@ -1,10 +1,13 @@
 import json
-import os
-import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from infrastructure.report_service import (
+    cleanup_report_file,
+    create_report_path,
+    prune_stale_reports,
+)
 from infrastructure.runner_service import SubprocessRunnerService
 
 router = APIRouter(prefix="/ws", tags=["runner"])
@@ -33,8 +36,9 @@ async def websocket_run(websocket: WebSocket):
 
             runner = SubprocessRunnerService(target_path)
 
-            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
-                report_json_path = tmp.name
+            prune_stale_reports(target_path)
+            report_file = create_report_path(target_path, prefix="run")
+            report_json_path = str(report_file)
 
             try:
                 async for chunk in runner.run_test_stream(
@@ -46,11 +50,7 @@ async def websocket_run(websocket: WebSocket):
 
                     await websocket.send_text(chunk)
             finally:
-                if os.path.exists(report_json_path):
-                    try:
-                        os.remove(report_json_path)
-                    except OSError:
-                        pass
+                cleanup_report_file(report_json_path)
         elif action == "STOP":
             if runner:
                 await runner.abort()

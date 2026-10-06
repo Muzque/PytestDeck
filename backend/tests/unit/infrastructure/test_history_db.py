@@ -57,3 +57,19 @@ def test_history_database_lifecycle(tmp_path):
     deleted = db.delete_run("test_b.py::test_bar")
     assert deleted is True
     assert db.get_all_runs() == {}
+
+
+def test_history_database_target_repo_untouched(tmp_path, monkeypatch):
+    mock_app_root = tmp_path / "pytestdeck_app"
+    monkeypatch.setenv("PYTESTDECK_ROOT", str(mock_app_root))
+
+    target_repo = tmp_path / "inventory_service"
+    target_repo.mkdir()
+
+    db = HistoryDatabase(target_path=target_repo)
+    assert db.db_path == mock_app_root / ".pytestdeck" / "inventory_service" / "history.db"
+    assert db.db_path.exists()
+
+    # Verify target repo is completely clean and untouched
+    assert list(target_repo.iterdir()) == []
+    assert not (target_repo / ".pytestdeck").exists()

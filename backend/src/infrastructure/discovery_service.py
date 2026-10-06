@@ -1,10 +1,14 @@
 import asyncio
 import json
 import os
-import tempfile
 from typing import Any
 
 from infrastructure.env_status import apply_target_venv, ensure_target_env_ready
+from infrastructure.report_service import (
+    cleanup_report_file,
+    create_report_path,
+    prune_stale_reports,
+)
 
 
 def get_env_config() -> dict[str, Any]:
@@ -74,8 +78,9 @@ class PytestDiscoveryService:
             total_items = sum(len(c.get("result", [])) for c in collectors)
             return collectors, total_items
 
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
-            tmp_report = tmp.name
+        prune_stale_reports(target_dir)
+        report_file = create_report_path(target_dir, prefix="discovery")
+        tmp_report = str(report_file)
 
         try:
             cmd = [
@@ -131,8 +136,4 @@ class PytestDiscoveryService:
             )
             return collectors, total_items
         finally:
-            if os.path.exists(tmp_report):
-                try:
-                    os.remove(tmp_report)
-                except OSError:
-                    pass
+            cleanup_report_file(tmp_report)
