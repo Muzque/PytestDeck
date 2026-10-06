@@ -224,12 +224,12 @@ export function useTestRunner() {
     { label: 'Acceptance (Behave)', path: 'backend/tests/acceptance' }
   ])
 
-  const MAX_LOG_LINES = 5000
+  const MAX_LOG_LINES = 50000
 
   const appendLog = (line) => {
     logs.value.push(line)
-    if (logs.value.length > MAX_LOG_LINES) {
-      logs.value = logs.value.slice(-MAX_LOG_LINES)
+    if (logs.value.length > MAX_LOG_LINES + 5000) {
+      logs.value.splice(0, 5000)
     }
   }
 

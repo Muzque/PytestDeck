@@ -14,11 +14,36 @@ const { currentTerminalTheme, terminalThemes } = useTheme()
 const terminalContainer = ref(null)
 let term = null
 let fitAddon = null
+let resizeObserver = null
+let currentLogsRef = null
+let lastLogCount = 0
 
 const applyTerminalTheme = (themeId) => {
   if (!term) return
   const themeObj = TERMINAL_THEMES[themeId] || TERMINAL_THEMES['apple-dark']
   term.options.theme = themeObj.options
+}
+
+const handleResize = () => {
+  if (fitAddon && terminalContainer.value && terminalContainer.value.clientWidth > 0) {
+    try {
+      fitAddon.fit()
+    } catch {
+      // Ignore fit errors if element dimensions are transiently zero
+    }
+  }
+}
+
+const resetAndWriteAll = (allLogs) => {
+  if (!term) return
+  term.clear()
+  if (allLogs && allLogs.length > 0) {
+    allLogs.forEach(line => term.write(line))
+    lastLogCount = allLogs.length
+  } else {
+    lastLogCount = 0
+  }
+  term.scrollToBottom()
 }
 
 onMounted(() => {
@@ -29,40 +54,62 @@ onMounted(() => {
     fontSize: 13,
     fontFamily: 'Fira Code, Menlo, Monaco, "Courier New", monospace',
     convertEol: true,
-    cursorBlink: true
+    cursorBlink: true,
+    scrollback: 50000
   })
   
   fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
   term.open(terminalContainer.value)
-  fitAddon.fit()
+  handleResize()
 
-  props.logs.forEach(line => term.write(line))
+  currentLogsRef = props.logs
+  if (props.logs && props.logs.length > 0) {
+    props.logs.forEach(line => term.write(line))
+    lastLogCount = props.logs.length
+  } else {
+    lastLogCount = 0
+  }
+
+  resizeObserver = new ResizeObserver(() => {
+    handleResize()
+  })
+  if (terminalContainer.value) {
+    resizeObserver.observe(terminalContainer.value)
+  }
 
   window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   window.removeEventListener('resize', handleResize)
   if (term) term.dispose()
 })
 
-const handleResize = () => {
-  if (fitAddon) fitAddon.fit()
-}
-
-let lastLogCount = props.logs.length
-
 watch(() => props.logs, (newLogs) => {
   if (!term) return
 
-  // If logs array was reset/cleared or replaced (e.g. starting a run or selecting history)
-  if (!newLogs || newLogs.length === 0 || newLogs.length < lastLogCount) {
-    term.clear()
-    if (newLogs && newLogs.length > 0) {
-      newLogs.forEach(line => term.write(line))
-    }
-    lastLogCount = newLogs ? newLogs.length : 0
+  // If logs array was reset/cleared
+  if (!newLogs || newLogs.length === 0) {
+    currentLogsRef = newLogs
+    resetAndWriteAll([])
+    return
+  }
+
+  // If logs array was replaced (e.g. starting a run or selecting history item)
+  if (newLogs !== currentLogsRef) {
+    currentLogsRef = newLogs
+    resetAndWriteAll(newLogs)
+    return
+  }
+
+  // If logs array was trimmed in place
+  if (newLogs.length < lastLogCount) {
+    resetAndWriteAll(newLogs)
     return
   }
 
@@ -164,7 +211,11 @@ watch(currentTerminalTheme, (newThemeId) => {
 .terminal-container {
   flex: 1;
   width: 100%;
+  min-height: 0;
+  min-width: 0;
   padding: 8px;
   box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
 }
 </style>

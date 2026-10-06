@@ -233,6 +233,48 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     // Verify output cleared back to empty state
     await expect(page.locator('.method-terminal-empty')).toBeVisible()
   })
+
+  test('should handle tab switching and sidebar resize without clipping terminal', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Verify initial terminal output visibility and bounding dimensions
+    const terminal = page.locator('.terminal-wrapper')
+    await expect(terminal).toBeVisible()
+    const screen = page.locator('.terminal-container .xterm-screen')
+    await expect(screen).toBeVisible()
+
+    const initialBox = await screen.boundingBox()
+    expect(initialBox).not.toBeNull()
+    expect(initialBox.width).toBeGreaterThan(100)
+    expect(initialBox.height).toBeGreaterThan(100)
+
+    // Switch to Metrics & Summary tab (hiding terminal view)
+    await page.click('button:has-text("Metrics & Summary")')
+    await expect(page.locator('.summary-pane')).toBeVisible()
+    await expect(terminal).not.toBeVisible()
+
+    // Switch back to Terminal Output tab (restoring terminal view)
+    await page.click('button:has-text("Terminal Output")')
+    await expect(terminal).toBeVisible()
+    await expect(screen).toBeVisible()
+
+    // Drag the sidebar resizer to change container dimensions
+    const resizer = page.locator('.sidebar-resizer')
+    await expect(resizer).toBeVisible()
+    const resizerBox = await resizer.boundingBox()
+    expect(resizerBox).not.toBeNull()
+
+    await page.mouse.move(resizerBox.x + resizerBox.width / 2, resizerBox.y + resizerBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(resizerBox.x + 100, resizerBox.y + resizerBox.height / 2)
+    await page.mouse.up()
+
+    // Verify terminal screen adapted to updated dimensions
+    const resizedBox = await screen.boundingBox()
+    expect(resizedBox).not.toBeNull()
+    expect(resizedBox.width).toBeGreaterThan(100)
+    expect(resizedBox.height).toBeGreaterThan(100)
+  })
 })
 
 
