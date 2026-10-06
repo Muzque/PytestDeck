@@ -11,7 +11,8 @@ const props = defineProps({
   selectedNodes: { type: Object, required: true },
   selectedCount: { type: Number, default: 0 },
   isRunning: { type: Boolean, default: false },
-  isDiscovering: { type: Boolean, default: false }
+  isDiscovering: { type: Boolean, default: false },
+  methodOutputs: { type: Object, default: () => ({}) }
 })
 
 const emit = defineEmits([
@@ -119,6 +120,7 @@ const activeOptionCount = computed(() =>
       <TreeNode 
         :node="testTree" 
         :selectedNodes="selectedNodes"
+        :methodOutputs="methodOutputs"
         @toggle-select="emit('toggle-select', $event)"
       />
     </div>

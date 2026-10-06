@@ -144,10 +144,13 @@ class MethodOutputCollector:
                         matched_key = k
                         break
 
-            if matched_key:
-                self.method_outputs[matched_key]["outcome"] = outcome
-                if duration is not None:
-                    self.method_outputs[matched_key]["duration"] = round(float(duration), 3)
+            if not matched_key:
+                self._ensure_node(nid)
+                matched_key = nid
+
+            self.method_outputs[matched_key]["outcome"] = outcome
+            if duration is not None:
+                self.method_outputs[matched_key]["duration"] = round(float(duration), 3)
 
     def get_results(self) -> dict[str, Any]:
         """Returns normalized method outputs dictionary."""

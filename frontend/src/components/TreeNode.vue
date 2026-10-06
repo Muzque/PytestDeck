@@ -4,7 +4,8 @@ import { useTooltip } from '../composables/useTooltip'
 
 const props = defineProps({
   node: { type: Object, required: true },
-  selectedNodes: { type: Set, required: true }
+  selectedNodes: { type: Set, required: true },
+  methodOutputs: { type: Object, default: () => ({}) }
 })
 
 const emit = defineEmits(['toggle-select'])
@@ -22,6 +23,94 @@ watch(
 
 const isChecked = computed(() => {
   return props.selectedNodes.has(props.node.id)
+})
+
+const isFunctionNode = computed(() => {
+  return (
+    props.node.type === 'function' ||
+    props.node.type === 'fun' ||
+    props.node.type === 'scenario' ||
+    (props.node.id && props.node.id.includes('::') && (!props.node.children || props.node.children.length === 0))
+  )
+})
+
+const nodeRecord = computed(() => {
+  if (!isFunctionNode.value) return null
+  const outputs = props.methodOutputs || {}
+  const id = props.node.id
+  if (!id) return null
+
+  if (outputs[id]) {
+    return outputs[id]
+  }
+
+  for (const [key, val] of Object.entries(outputs)) {
+    if ((id.endsWith(key) || key.endsWith(id)) && val) {
+      return val
+    }
+  }
+  return null
+})
+
+const nodeOutcome = computed(() => {
+  return nodeRecord.value?.outcome ? nodeRecord.value.outcome.toLowerCase() : null
+})
+
+const outcomeTitle = computed(() => {
+  if (!nodeOutcome.value) return ''
+  return `Result: ${nodeOutcome.value}`
+})
+
+const formattedDuration = computed(() => {
+  const d = nodeRecord.value?.duration
+  if (d === null || d === undefined) return null
+  const num = Number(d)
+  if (isNaN(num)) return null
+  if (num < 1.0) {
+    return `${Math.round(num * 1000)}ms`
+  }
+  return `${num.toFixed(2)}s`
+})
+
+// Calculate aggregated outcomes for collapsed directories and files
+const rollupCounts = computed(() => {
+  if (!props.node.children || props.node.children.length === 0) {
+    return { total: 0, passed: 0, failed: 0, skipped: 0, running: 0 }
+  }
+
+  const counts = { total: 0, passed: 0, failed: 0, skipped: 0, running: 0 }
+  const outputs = props.methodOutputs || {}
+
+  const traverse = (item) => {
+    if (item.children && item.children.length > 0) {
+      for (const child of item.children) {
+        traverse(child)
+      }
+    } else {
+      const id = item.id
+      if (!id) return
+      let rec = outputs[id]
+      if (!rec) {
+        for (const [k, v] of Object.entries(outputs)) {
+          if ((id.endsWith(k) || k.endsWith(id)) && v) {
+            rec = v
+            break
+          }
+        }
+      }
+      if (rec?.outcome) {
+        const out = rec.outcome.toLowerCase()
+        if (out === 'passed') counts.passed++
+        else if (out === 'failed' || out === 'error') counts.failed++
+        else if (out === 'skipped') counts.skipped++
+        else if (out === 'running') counts.running++
+        counts.total++
+      }
+    }
+  }
+
+  traverse(props.node)
+  return counts
 })
 
 const toggleOpen = () => {
@@ -48,7 +137,13 @@ const onChildToggleSelect = (targetNode) => {
   <div class="tree-node">
     <div 
       class="node-row" 
-      :class="{ 'is-selected': isChecked }" 
+      :class="[
+        { 'is-selected': isChecked },
+        nodeOutcome ? 'row-outcome-' + nodeOutcome : '',
+        !isOpen && rollupCounts.failed > 0 ? 'row-has-failed' : '',
+        !isOpen && rollupCounts.failed === 0 && rollupCounts.passed > 0 ? 'row-has-passed' : '',
+        !isOpen && rollupCounts.failed === 0 && rollupCounts.passed === 0 && rollupCounts.skipped > 0 ? 'row-has-skipped' : ''
+      ]" 
       @click="onRowClick"
       @mouseenter="showTooltip(node, $event)"
       @mouseleave="hideTooltip"
@@ -74,9 +169,39 @@ const onChildToggleSelect = (targetNode) => {
         {{ node.type.substring(0, 3).toUpperCase() }}
       </span>
 
-      <span class="node-name">
+      <span 
+        class="node-name" 
+        :title="outcomeTitle"
+      >
         {{ node.name }}
       </span>
+
+      <!-- Right-aligned duration chip for test functions -->
+      <span 
+        v-if="formattedDuration" 
+        class="node-duration" 
+        :class="nodeOutcome ? 'outcome-' + nodeOutcome : ''"
+        title="Execution duration"
+      >
+        {{ formattedDuration }}
+      </span>
+
+      <!-- Rollup badges when folder/file is collapsed -->
+      <div 
+        v-if="!isOpen && rollupCounts.total > 0" 
+        class="node-rollup"
+        :title="`${rollupCounts.passed} passed, ${rollupCounts.failed} failed, ${rollupCounts.skipped} skipped`"
+      >
+        <span v-if="rollupCounts.failed > 0" class="rollup-chip failed">
+          {{ rollupCounts.failed }} ✗
+        </span>
+        <span v-if="rollupCounts.passed > 0" class="rollup-chip passed">
+          {{ rollupCounts.passed }} ✓
+        </span>
+        <span v-if="rollupCounts.skipped > 0" class="rollup-chip skipped">
+          {{ rollupCounts.skipped }} –
+        </span>
+      </div>
     </div>
 
     <div v-if="isOpen && node.children && node.children.length > 0" class="node-children">
@@ -85,6 +210,7 @@ const onChildToggleSelect = (targetNode) => {
         :key="child.id" 
         :node="child"
         :selectedNodes="selectedNodes"
+        :methodOutputs="methodOutputs"
         @toggle-select="onChildToggleSelect"
       />
     </div>
@@ -103,8 +229,9 @@ const onChildToggleSelect = (targetNode) => {
   padding: 4px 8px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
   min-width: max-content;
+  border-left: 3px solid transparent;
 }
 
 .node-row:hover {
@@ -113,6 +240,32 @@ const onChildToggleSelect = (targetNode) => {
 .node-row.is-selected {
   background: rgba(56, 189, 248, 0.15);
 }
+
+/* Left-edge status stripe */
+.node-row.row-outcome-passed,
+.node-row.row-has-passed {
+  border-left-color: var(--accent-green);
+  background: rgba(52, 211, 153, 0.04);
+}
+
+.node-row.row-outcome-failed,
+.node-row.row-outcome-error,
+.node-row.row-has-failed {
+  border-left-color: var(--accent-red);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.node-row.row-outcome-skipped,
+.node-row.row-has-skipped {
+  border-left-color: var(--accent-yellow);
+  background: rgba(251, 191, 36, 0.04);
+}
+
+.node-row.row-outcome-running {
+  border-left-color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.05);
+}
+
 .toggle-icon {
   font-size: 0.65rem;
   color: var(--text-muted);
@@ -157,10 +310,81 @@ const onChildToggleSelect = (targetNode) => {
   color: var(--accent-yellow);
   border: 1px solid rgba(251, 191, 36, 0.3);
 }
+
 .node-name {
   color: var(--text-main);
   white-space: nowrap;
 }
+
+/* Right-aligned duration chip */
+.node-duration {
+  margin-left: auto;
+  font-size: 0.70rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.node-duration.outcome-passed {
+  color: var(--accent-green);
+  background: rgba(52, 211, 153, 0.10);
+  border-color: rgba(52, 211, 153, 0.25);
+}
+
+.node-duration.outcome-failed,
+.node-duration.outcome-error {
+  color: var(--accent-red);
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.node-duration.outcome-skipped {
+  color: var(--accent-yellow);
+  background: rgba(251, 191, 36, 0.10);
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+/* Rollup chips on collapsed folders/files */
+.node-rollup {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rollup-chip {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.rollup-chip.passed {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.rollup-chip.failed {
+  background: rgba(248, 113, 113, 0.18);
+  color: var(--accent-red);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.rollup-chip.skipped {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
 .node-children {
   padding-left: 18px;
   border-left: 1px dashed rgba(255, 255, 255, 0.1);

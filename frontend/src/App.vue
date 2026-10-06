@@ -40,7 +40,8 @@ const {
   singleSelectedNode,
   currentMethodOutput,
   runSingleMethod,
-  clearMethodOutput
+  clearMethodOutput,
+  methodOutputs
 } = useTestRunner()
 
 import { useSidebarResize } from './composables/useSidebarResize'
@@ -71,6 +72,7 @@ const { activeTooltip } = useTooltip()
         v-model:extraArgs="extraArgs"
         :testTree="testTree"
         :selectedNodes="selectedNodes"
+        :methodOutputs="methodOutputs"
         @toggle-select="toggleSelectNode"
         @discover="discoverTests"
         @run="runTests"
