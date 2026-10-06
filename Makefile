@@ -1,7 +1,7 @@
 .PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run docker-run
 
 IMAGE_NAME ?= pytestdeck
-IMAGE_TAG ?= latest
+IMAGE_TAG  ?= latest
 
 # Automatically load environment variables from .env if present
 ENV_FILE ?= $(wildcard .env)
@@ -13,15 +13,15 @@ ENV_ARG := $(if $(ENV_FILE),--env-file $(abspath $(ENV_FILE)),)
 
 help: ## Display available commands
 	@echo "PytestDeck Automation Commands:"
-	@grep -h -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@awk 'BEGIN {FS = ":.*## "} /^##@/ { printf "\n\033[1m%s:\033[0m\n", substr($$0, 5) } /^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
+##@ Testing
 test: lint unit-test integration-test acceptance-test e2e-test ## Run linting, unit, integration, acceptance, and E2E tests
 
 lint: ## Run linter and code checks
 	@echo "Running Backend & Frontend Linting checks..."
 	cd backend && PYTHONPATH=src:src/api uv run ruff check src tests
 	cd frontend && npm run lint
-
 
 unit-test: ## Run unit tests
 	@echo "Running Unit Tests..."
@@ -39,11 +39,12 @@ e2e-test: ## Run frontend Playwright E2E tests
 	@echo "Running Frontend E2E Tests..."
 	cd frontend && npm run test:e2e
 
+##@ Deployment
 build-frontend: ## Build Vue 3 frontend SPA
 	@echo "Building Frontend..."
 	cd frontend && npm install && npm run build
 
-run: ## Run development server locally
+run: build-frontend ## Run development server locally
 	@echo "Starting PytestDeck Dev Server..."
 	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port $(or $(PORT),9388) $(ENV_ARG)
 
