@@ -37,7 +37,7 @@ The backend is built with FastAPI and uses `uv` for dependency management.
 
 ```bash
 # Run backend dev server with auto-reload
-make run-dev
+make run
 ```
 
 ### Frontend Development
@@ -86,7 +86,7 @@ make build-frontend
 To test multi-stage Docker compilation locally:
 
 ```bash
-make deploy
+make docker-run
 # or
 docker compose up -d --build
 ```

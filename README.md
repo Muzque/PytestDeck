@@ -24,7 +24,7 @@ Lightweight cross-project Python test control deck built with FastAPI, Vue 3 SPA
 To launch PytestDeck as a containerized service:
 
 ```bash
-make deploy
+make docker-run
 ```
 
 *(This runs `docker compose up -d --build` in background mode)*.
@@ -47,12 +47,12 @@ Once started, open **`http://127.0.0.1:9388`** in your browser.
 If you are running directly on your host machine without Docker:
 
 ```bash
-make run-dev
+make run
 ```
 
 Open **`http://127.0.0.1:9388`** in your browser.
 
-This is the **recommended mode when the target repo lives on your machine**: `make run-dev` automatically loads `.env` (including `TARGET_REPO`, suite paths, and `PORT`) so your target repo is preselected immediately. In this mode, `uv run` inside the target directory reuses the target's existing local `.venv` directly, so there is no second environment to build and no waiting on startup. Make sure the target's environment is set up first:
+This is the **recommended mode when the target repo lives on your machine**: `make run` automatically loads `.env` (including `TARGET_REPO`, suite paths, and `PORT`) so your target repo is preselected immediately. In this mode, `uv run` inside the target directory reuses the target's existing local `.venv` directly, so there is no second environment to build and no waiting on startup. Make sure the target's environment is set up first:
 
 ```bash
 cd /path/to/target-repo && uv sync --all-groups
@@ -122,7 +122,7 @@ inventory-service/                    # TARGET_REPO=/Users/alex/projects/invento
 └── pyproject.toml
 ```
 
-When you start PytestDeck (`make deploy` or `make run-dev`), the dashboard automatically targets `/Users/alex/projects/inventory-service` and populates the test suites matching your structure.
+When you start PytestDeck (`make docker-run` or `make run`), the dashboard automatically targets `/Users/alex/projects/inventory-service` and populates the test suites matching your structure.
 
 ---
 

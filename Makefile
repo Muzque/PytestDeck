@@ -1,4 +1,4 @@
-.PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run-dev deploy
+.PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run docker-run
 
 IMAGE_NAME ?= pytestdeck
 IMAGE_TAG ?= latest
@@ -43,10 +43,10 @@ build-frontend: ## Build Vue 3 frontend SPA
 	@echo "Building Frontend..."
 	cd frontend && npm install && npm run build
 
-run-dev: ## Run development server locally
+run: ## Run development server locally
 	@echo "Starting PytestDeck Dev Server..."
 	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port $(or $(PORT),9388) $(ENV_ARG)
 
-deploy: ## Build and launch Docker container in detached mode using docker compose
+docker-run: ## Build and launch Docker container in detached mode using docker compose
 	@echo "Deploying PytestDeck via docker compose in detached mode..."
 	docker compose up -d --build
