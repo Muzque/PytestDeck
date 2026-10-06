@@ -13,7 +13,7 @@ ENV_ARG := $(if $(ENV_FILE),--env-file $(abspath $(ENV_FILE)),)
 
 help: ## Display available commands
 	@echo "PytestDeck Automation Commands:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -h -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 test: lint unit-test integration-test acceptance-test e2e-test ## Run linting, unit, integration, acceptance, and E2E tests
 
