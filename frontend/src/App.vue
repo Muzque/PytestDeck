@@ -131,7 +131,7 @@ const { activeTooltip } = useTooltip()
         <div class="tab-content">
           <!-- Terminal Output Tab -->
           <div v-show="activeTab === 'live'" class="tab-pane">
-            <TerminalView :logs="logs" />
+            <TerminalView :logs="logs" :isRunning="isRunning" />
           </div>
 
           <!-- Detail Info Tab (for Integration & Behave suites) -->

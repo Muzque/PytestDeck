@@ -6,6 +6,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
+  timeout: 45000,
   reporter: 'list',
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:9388',

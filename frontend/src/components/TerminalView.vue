@@ -1,12 +1,13 @@
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { defineProps, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
-import { useTheme, TERMINAL_THEMES } from '../composables/useTheme'
+import { TERMINAL_THEMES, useTheme } from '../composables/useTheme'
 
 const props = defineProps({
-  logs: { type: Array, default: () => [] }
+  logs: { type: Array, default: () => [] },
+  isRunning: { type: Boolean, default: false }
 })
 
 const { currentTerminalTheme, terminalThemes } = useTheme()
@@ -17,6 +18,23 @@ let fitAddon = null
 let resizeObserver = null
 let currentLogsRef = null
 let lastLogCount = 0
+let hasSessionStarted = false
+let preSessionBuffer = []
+
+const isSessionStart = (line) => {
+  if (typeof line !== 'string') return false
+  return line.includes('test session starts') || line.trimStart().startsWith('Feature:')
+}
+
+const filterSessionLogs = (allLogs) => {
+  if (!allLogs || allLogs.length === 0) return []
+  const idx = allLogs.findIndex(isSessionStart)
+  if (idx === -1) return allLogs
+  if (allLogs[idx].includes('test session starts')) {
+    return allLogs.slice(idx + 1)
+  }
+  return allLogs.slice(idx)
+}
 
 const applyTerminalTheme = (themeId) => {
   if (!term) return
@@ -37,12 +55,13 @@ const handleResize = () => {
 const resetAndWriteAll = (allLogs) => {
   if (!term) return
   term.clear()
-  if (allLogs && allLogs.length > 0) {
-    allLogs.forEach(line => term.write(line))
-    lastLogCount = allLogs.length
-  } else {
-    lastLogCount = 0
+  preSessionBuffer = []
+  const displayLogs = filterSessionLogs(allLogs)
+  if (displayLogs && displayLogs.length > 0) {
+    displayLogs.forEach(line => term.write(line))
   }
+  lastLogCount = allLogs ? allLogs.length : 0
+  hasSessionStarted = allLogs ? allLogs.some(isSessionStart) : false
   term.scrollToBottom()
 }
 
@@ -57,7 +76,7 @@ onMounted(() => {
     cursorBlink: true,
     scrollback: 50000
   })
-  
+
   fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
   term.open(terminalContainer.value)
@@ -65,10 +84,11 @@ onMounted(() => {
 
   currentLogsRef = props.logs
   if (props.logs && props.logs.length > 0) {
-    props.logs.forEach(line => term.write(line))
-    lastLogCount = props.logs.length
+    resetAndWriteAll(props.logs)
   } else {
     lastLogCount = 0
+    hasSessionStarted = false
+    preSessionBuffer = []
   }
 
   resizeObserver = new ResizeObserver(() => {
@@ -90,12 +110,21 @@ onUnmounted(() => {
   if (term) term.dispose()
 })
 
+watch(() => props.isRunning, (running) => {
+  if (!running && !hasSessionStarted && preSessionBuffer.length > 0) {
+    preSessionBuffer.forEach(line => term.write(line))
+    preSessionBuffer = []
+  }
+})
+
 watch(() => props.logs, (newLogs) => {
   if (!term) return
 
   // If logs array was reset/cleared
   if (!newLogs || newLogs.length === 0) {
     currentLogsRef = newLogs
+    hasSessionStarted = false
+    preSessionBuffer = []
     resetAndWriteAll([])
     return
   }
@@ -116,8 +145,24 @@ watch(() => props.logs, (newLogs) => {
   // If new log lines were appended during streaming
   if (newLogs.length > lastLogCount) {
     const appended = newLogs.slice(lastLogCount)
-    appended.forEach(line => term.write(line))
     lastLogCount = newLogs.length
+
+    for (const line of appended) {
+      if (!hasSessionStarted) {
+        if (line.includes('= test session starts =')) {
+          hasSessionStarted = true
+          preSessionBuffer = []
+        } else if (line.trimStart().startsWith('Feature:')) {
+          hasSessionStarted = true
+          preSessionBuffer = []
+          term.write(line)
+        } else {
+          preSessionBuffer.push(line)
+        }
+      } else {
+        term.write(line)
+      }
+    }
   }
 }, { deep: true })
 

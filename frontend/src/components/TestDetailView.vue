@@ -36,6 +36,14 @@ const stripAnsi = (str) => {
 const formattedOutput = computed(() => {
   if (!props.latestRun?.output) return ''
   let text = props.latestRun.output
+
+  // Strip pre-session runner commands and "test session starts" line
+  const sessionIdx = text.indexOf('test session starts')
+  if (sessionIdx !== -1) {
+    const nextLineStart = text.indexOf('\n', sessionIdx)
+    text = nextLineStart === -1 ? '' : text.slice(nextLineStart + 1)
+  }
+
   let escaped = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
