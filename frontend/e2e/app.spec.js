@@ -282,6 +282,21 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     expect(resizedBox.width).toBeGreaterThan(100)
     expect(resizedBox.height).toBeGreaterThan(100)
   })
+
+  test('should allow switching terminal font style', async ({ page }) => {
+    await page.waitForSelector('.terminal-wrapper', { timeout: 60000 })
+
+    const fontSelect = page.locator('.term-font-select')
+    await expect(fontSelect).toBeVisible()
+
+    // Switch font to JetBrains Mono
+    await fontSelect.selectOption('jetbrains-mono')
+    await expect(fontSelect).toHaveValue('jetbrains-mono')
+
+    // Switch font to SF Mono
+    await fontSelect.selectOption('sf-mono')
+    await expect(fontSelect).toHaveValue('sf-mono')
+  })
 })
 
 

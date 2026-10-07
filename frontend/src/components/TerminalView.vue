@@ -10,7 +10,7 @@ const props = defineProps({
   isRunning: { type: Boolean, default: false }
 })
 
-const { currentTerminalTheme, terminalThemes } = useTheme()
+const { currentTerminalTheme, terminalThemes, currentTerminalFont, terminalFonts } = useTheme()
 
 const terminalContainer = ref(null)
 let term = null
@@ -102,11 +102,14 @@ const resetAndWriteAll = (allLogs) => {
 
 onMounted(() => {
   const initialTheme = TERMINAL_THEMES[currentTerminalTheme.value] || TERMINAL_THEMES['apple-dark']
+  const initialFont = terminalFonts.find(f => f.id === currentTerminalFont.value) || terminalFonts[0]
 
   term = new Terminal({
     theme: initialTheme.options,
-    fontSize: 13,
-    fontFamily: 'Fira Code, Menlo, Monaco, "Courier New", monospace',
+    fontSize: 12.5,
+    fontFamily: initialFont.family,
+    lineHeight: 1.25,
+    letterSpacing: 0.2,
     convertEol: true,
     cursorBlink: true,
     scrollback: 50000
@@ -204,6 +207,13 @@ watch(() => props.logs, (newLogs) => {
 watch(currentTerminalTheme, (newThemeId) => {
   applyTerminalTheme(newThemeId)
 })
+
+watch(currentTerminalFont, (newFontId) => {
+  if (!term) return
+  const fontObj = terminalFonts.find(f => f.id === newFontId) || terminalFonts[0]
+  term.options.fontFamily = fontObj.family
+  handleResize()
+})
 </script>
 
 <template>
@@ -226,6 +236,11 @@ watch(currentTerminalTheme, (newThemeId) => {
           <span v-if="copied">✓ Copied</span>
           <span v-else>📋 Copy Output</span>
         </button>
+        <select v-model="currentTerminalFont" class="term-font-select" title="Terminal Font Style">
+          <option v-for="tf in terminalFonts" :key="tf.id" :value="tf.id">
+            {{ tf.label }}
+          </option>
+        </select>
         <select v-model="currentTerminalTheme" class="term-theme-select" title="Terminal Color Theme">
           <option v-for="tt in terminalThemes" :key="tt.id" :value="tt.id">
             {{ tt.label }}
@@ -322,7 +337,8 @@ watch(currentTerminalTheme, (newThemeId) => {
   color: #27c93f;
 }
 
-.term-theme-select {
+.term-theme-select,
+.term-font-select {
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   color: var(--text-main);
@@ -332,7 +348,8 @@ watch(currentTerminalTheme, (newThemeId) => {
   cursor: pointer;
 }
 
-.term-theme-select:hover {
+.term-theme-select:hover,
+.term-font-select:hover {
   border-color: var(--border-hover);
 }
 

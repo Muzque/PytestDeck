@@ -2,11 +2,20 @@ import { ref, watch, onMounted } from 'vue'
 
 const THEME_KEY = 'pytestdeck_theme'
 const TERM_THEME_KEY = 'pytestdeck_term_theme'
+const TERM_FONT_KEY = 'pytestdeck_term_font'
 
 export const THEMES = [
   { id: 'apple-glass-dark', label: '🍏 Apple Glass Dark' },
   { id: 'apple-glass-light', label: '🍎 Apple Glass Light' },
   { id: 'midnight', label: '🌙 Midnight Dark' }
+]
+
+export const TERMINAL_FONTS = [
+  { id: 'fira-code', label: '🔤 Fira Code', family: '"Fira Code", Menlo, Monaco, Consolas, monospace' },
+  { id: 'jetbrains-mono', label: '🔤 JetBrains Mono', family: '"JetBrains Mono", Menlo, Monaco, "Courier New", monospace' },
+  { id: 'sf-mono', label: '🔤 SF Mono', family: '"SF Mono", -apple-system, BlinkMacSystemFont, Menlo, monospace' },
+  { id: 'cascadia-code', label: '🔤 Cascadia Code', family: '"Cascadia Code", "Segoe UI Mono", monospace' },
+  { id: 'classic-courier', label: '🔤 Courier Classic', family: '"Courier New", Courier, monospace' },
 ]
 
 export const TERMINAL_THEMES = {
@@ -145,6 +154,7 @@ export const TERMINAL_THEMES = {
 export function useTheme() {
   const currentTheme = ref('apple-glass-dark')
   const currentTerminalTheme = ref('apple-dark')
+  const currentTerminalFont = ref('fira-code')
 
   const setTheme = (themeId) => {
     currentTheme.value = themeId
@@ -174,6 +184,17 @@ export function useTheme() {
     }
   }
 
+  const setTerminalFont = (fontId) => {
+    if (TERMINAL_FONTS.some(f => f.id === fontId)) {
+      currentTerminalFont.value = fontId
+      try {
+        localStorage.setItem(TERM_FONT_KEY, fontId)
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
   onMounted(() => {
     const savedTheme = localStorage.getItem(THEME_KEY)
     if (savedTheme && THEMES.some(t => t.id === savedTheme)) {
@@ -186,6 +207,11 @@ export function useTheme() {
     if (savedTermTheme && TERMINAL_THEMES[savedTermTheme]) {
       currentTerminalTheme.value = savedTermTheme
     }
+
+    const savedTermFont = localStorage.getItem(TERM_FONT_KEY)
+    if (savedTermFont && TERMINAL_FONTS.some(f => f.id === savedTermFont)) {
+      currentTerminalFont.value = savedTermFont
+    }
   })
 
   watch(currentTheme, (newTheme) => {
@@ -196,12 +222,19 @@ export function useTheme() {
     setTerminalTheme(newTermTheme)
   })
 
+  watch(currentTerminalFont, (newFont) => {
+    setTerminalFont(newFont)
+  })
+
   return {
     currentTheme,
     themes: THEMES,
     setTheme,
     currentTerminalTheme,
     terminalThemes: Object.values(TERMINAL_THEMES),
-    setTerminalTheme
+    setTerminalTheme,
+    currentTerminalFont,
+    terminalFonts: TERMINAL_FONTS,
+    setTerminalFont
   }
 }
