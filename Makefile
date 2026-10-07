@@ -1,4 +1,4 @@
-.PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run stop docker-run
+.PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run dev stop docker-run
 
 IMAGE_NAME ?= pytestdeck
 IMAGE_TAG  ?= latest
@@ -44,8 +44,12 @@ build-frontend: ## Build Vue 3 frontend SPA
 	@echo "Building Frontend..."
 	cd frontend && npm install && npm run build
 
-run: build-frontend ## Run development server locally
-	@echo "Starting PytestDeck Dev Server..."
+run: build-frontend ## Run PytestDeck server locally
+	@echo "Starting PytestDeck Server..."
+	cd backend && PYTHONPATH=src uv run uvicorn app:app --port $(or $(PORT),9388) $(ENV_ARG) $(if $(RELOAD),--reload,)
+
+dev: build-frontend ## Run PytestDeck in development mode with auto-reload
+	@echo "Starting PytestDeck Dev Server with auto-reload..."
 	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port $(or $(PORT),9388) $(ENV_ARG)
 
 stop: ## Stop the locally running PytestDeck dev server (macOS and Linux)

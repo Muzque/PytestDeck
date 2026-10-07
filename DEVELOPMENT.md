@@ -36,10 +36,13 @@ PytestDeck/
 The backend is built with FastAPI and uses `uv` for dependency management.
 
 ```bash
-# Run backend dev server with auto-reload
+# Run backend server locally
 make run
 
-# Stop local backend dev server
+# Run backend server with auto-reload (development mode)
+make dev
+
+# Stop local backend server
 make stop
 ```
 
