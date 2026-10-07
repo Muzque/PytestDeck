@@ -310,6 +310,30 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('.row-outcome-passed')).toHaveCount(0)
     await expect(page.locator('.row-outcome-failed')).toHaveCount(0)
   })
+
+  test('should persist run options across page reload', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    await page.click('#btn-run-options')
+    const markerInput = page.locator('#run-options-marker')
+    const extraInput = page.locator('#run-options-extra')
+    await expect(markerInput).toBeVisible()
+
+    await markerInput.fill('persisted_marker')
+    await extraInput.fill('-v --tb=short')
+    await page.click('#run-options-apply')
+    await expect(markerInput).not.toBeVisible()
+
+    // Reload page to verify values were persisted to DB
+    await page.reload()
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Open modal again and verify values
+    await page.click('#btn-run-options')
+    await expect(page.locator('#run-options-marker')).toHaveValue('persisted_marker')
+    await expect(page.locator('#run-options-extra')).toHaveValue('-v --tb=short')
+    await page.click('.ro-close')
+  })
 })
 
 

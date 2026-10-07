@@ -73,3 +73,25 @@ def test_history_database_target_repo_untouched(tmp_path, monkeypatch):
     # Verify target repo is completely clean and untouched
     assert list(target_repo.iterdir()) == []
     assert not (target_repo / ".pytestdeck").exists()
+
+
+def test_history_database_run_options(tmp_path):
+    db_file = tmp_path / "test_options.db"
+    db = HistoryDatabase(db_path=db_file)
+
+    # Defaults to empty
+    initial = db.get_run_options()
+    assert initial == {"marker_filter": "", "extra_args": ""}
+
+    # Save run options
+    db.save_run_options(marker_filter="smoke and not slow", extra_args="-s -v")
+    saved = db.get_run_options()
+    assert saved["marker_filter"] == "smoke and not slow"
+    assert saved["extra_args"] == "-s -v"
+
+    # Update run options
+    db.save_run_options(marker_filter="integration", extra_args="")
+    updated = db.get_run_options()
+    assert updated["marker_filter"] == "integration"
+    assert updated["extra_args"] == ""
+

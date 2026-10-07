@@ -108,6 +108,7 @@ export function useTestRunner() {
 
   watch(targetPath, () => {
     loadStoredMethodOutputs()
+    loadStoredRunOptions()
   })
 
   const clearMethodOutput = async (nodeId) => {
@@ -215,6 +216,49 @@ export function useTestRunner() {
   const summary = ref(null)
   const markerFilter = ref('')
   const extraArgs = ref('')
+
+  let isInitialRunOptionsLoaded = false
+
+  const loadStoredRunOptions = async () => {
+    try {
+      const url = targetPath.value
+        ? `/api/run-options?target_path=${encodeURIComponent(targetPath.value)}`
+        : '/api/run-options'
+      const res = await fetch(url)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.marker_filter !== undefined) markerFilter.value = data.marker_filter || ''
+        if (data.extra_args !== undefined) extraArgs.value = data.extra_args || ''
+      }
+    } catch (e) {
+      console.error('Failed to load run options from server', e)
+    } finally {
+      isInitialRunOptionsLoaded = true
+    }
+  }
+
+  const persistRunOptions = async () => {
+    if (!isInitialRunOptionsLoaded) return
+    try {
+      await fetch('/api/run-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPath.value || '',
+          marker_filter: markerFilter.value || '',
+          extra_args: extraArgs.value || ''
+        })
+      })
+    } catch (e) {
+      console.error('Failed to save run options to server', e)
+    }
+  }
+
+  loadStoredRunOptions()
+
+  watch([markerFilter, extraArgs], () => {
+    persistRunOptions()
+  })
 
 
   const runHistory = ref([])

@@ -53,3 +53,33 @@ async def prune_orphaned_runs(req: PruneRunsRequest):
         return {"success": True, "pruned_count": pruned_count}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+run_options_router = APIRouter(prefix="/api/run-options", tags=["history"])
+
+
+class SaveRunOptionsRequest(BaseModel):
+    target_path: str = ""
+    marker_filter: str = ""
+    extra_args: str = ""
+
+
+@run_options_router.get("")
+async def get_run_options(target_path: str = Query("", description="Target repo path")):
+    try:
+        db = HistoryDatabase(target_path=target_path)
+        options = db.get_run_options()
+        return options
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@run_options_router.post("")
+async def save_run_options(req: SaveRunOptionsRequest):
+    try:
+        db = HistoryDatabase(target_path=req.target_path)
+        db.save_run_options(marker_filter=req.marker_filter, extra_args=req.extra_args)
+        return {"success": True, "marker_filter": req.marker_filter, "extra_args": req.extra_args}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

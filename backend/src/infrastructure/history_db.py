@@ -55,6 +55,16 @@ class HistoryDatabase:
                 CREATE INDEX IF NOT EXISTS idx_test_runs_updated ON test_runs(updated_at);
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS run_options (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    marker_filter TEXT,
+                    extra_args TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
             conn.commit()
 
     def save_run(
@@ -183,3 +193,32 @@ class HistoryDatabase:
             del_cur = conn.execute(f"DELETE FROM test_runs WHERE node_id IN ({placeholders})", orphans)
             conn.commit()
             return del_cur.rowcount
+
+    def save_run_options(self, marker_filter: str = "", extra_args: str = "") -> None:
+        """Saves run options (marker filter and extra args) to the database."""
+        with self._get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO run_options (id, marker_filter, extra_args, updated_at)
+                VALUES (1, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(id) DO UPDATE SET
+                    marker_filter=excluded.marker_filter,
+                    extra_args=excluded.extra_args,
+                    updated_at=CURRENT_TIMESTAMP;
+                """,
+                (marker_filter or "", extra_args or ""),
+            )
+            conn.commit()
+
+    def get_run_options(self) -> dict[str, str]:
+        """Retrieves stored run options (marker filter and extra args)."""
+        with self._get_connection() as conn:
+            cur = conn.execute("SELECT marker_filter, extra_args FROM run_options WHERE id = 1")
+            row = cur.fetchone()
+            if row:
+                return {
+                    "marker_filter": row["marker_filter"] or "",
+                    "extra_args": row["extra_args"] or "",
+                }
+            return {"marker_filter": "", "extra_args": ""}
+

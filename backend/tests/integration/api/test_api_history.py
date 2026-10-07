@@ -42,3 +42,26 @@ def test_api_history_endpoints(client, tmp_path):
     # Verify pruned
     resp = client.get("/api/test-runs")
     assert resp.json() == {"runs": {}}
+
+
+def test_api_run_options_endpoints(client):
+    # Check default run options
+    resp = client.get("/api/run-options")
+    assert resp.status_code == 200
+    assert resp.json() == {"marker_filter": "", "extra_args": ""}
+
+    # Save run options
+    post_resp = client.post(
+        "/api/run-options",
+        json={"marker_filter": "unit and not slow", "extra_args": "-s --tb=short"},
+    )
+    assert post_resp.status_code == 200
+    assert post_resp.json()["success"] is True
+
+    # Retrieve saved run options
+    get_resp = client.get("/api/run-options")
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    assert data["marker_filter"] == "unit and not slow"
+    assert data["extra_args"] == "-s --tb=short"
+
