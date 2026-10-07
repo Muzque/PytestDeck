@@ -110,3 +110,51 @@ def test_merge_json_report_stage_durations():
     assert "tests/test_foo.py::test_with_fixtures" in res
     assert res["tests/test_foo.py::test_with_fixtures"]["duration"] == round(0.0012 + 0.0004 + 0.0001, 4)
     assert res["tests/test_foo.py::test_setup_failure"]["duration"] == round(0.0025 + 0.0002, 4)
+
+
+def test_dotted_class_failure_output():
+    text = (
+        "tests/test_cls.py::TestClass::test_broken FAILED [100%]\n"
+        "FAILURES\n"
+        "_____________________________ TestClass.test_broken _____________________________\n"
+        "def test_broken(self):\n"
+        ">   raise ValueError('custom message')\n"
+        "E   ValueError: custom message\n"
+        "tests/test_cls.py:10: ValueError\n"
+        "=========================== short test summary info ============================\n"
+    )
+    collector = MethodOutputCollector()
+    for line in text.splitlines(keepends=True):
+        collector.process_line(line)
+
+    results = collector.get_results()
+    assert "tests/test_cls.py::TestClass::test_broken" in results
+    out = results["tests/test_cls.py::TestClass::test_broken"]["output"]
+    assert "ValueError: custom message" in out
+
+
+def test_merge_json_report_enriches_captured_output():
+    collector = MethodOutputCollector()
+    collector.process_line("tests/test_p.py::test_logging PASSED [100%]\n")
+
+    report = {
+        "tests": [
+            {
+                "nodeid": "tests/test_p.py::test_logging",
+                "outcome": "passed",
+                "call": {
+                    "duration": 0.005,
+                    "outcome": "passed",
+                    "stdout": "Log line 1\nLog line 2\nLog line 3\n",
+                    "stderr": "Warning: cache miss\n",
+                },
+            }
+        ]
+    }
+    collector.merge_json_report(report)
+    res = collector.get_results()
+    output = res["tests/test_p.py::test_logging"]["output"]
+    assert "Log line 1" in output
+    assert "Log line 2" in output
+    assert "Warning: cache miss" in output
+

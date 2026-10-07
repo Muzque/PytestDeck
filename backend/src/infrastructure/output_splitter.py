@@ -106,8 +106,16 @@ class MethodOutputCollector:
             if fail_match:
                 func_name = fail_match.group(1).strip()
                 self.current_failure_node = None
+                normalized_func = func_name.replace(".", "::")
                 for n in self.method_outputs:
-                    if n.endswith(f"::{func_name}") or n == func_name:
+                    normalized_n = n.replace(".", "::")
+                    if (
+                        normalized_n.endswith(f"::{normalized_func}")
+                        or normalized_n == normalized_func
+                        or n.endswith(f"::{func_name}")
+                        or n == func_name
+                        or ("::" in normalized_n and normalized_n.split("::")[-1] == normalized_func.split("::")[-1])
+                    ):
                         self.current_failure_node = n
                         self.method_outputs[n]["outcome"] = "failed"
                         break
@@ -172,6 +180,26 @@ class MethodOutputCollector:
             self.method_outputs[matched_key]["outcome"] = outcome
             if duration is not None:
                 self.method_outputs[matched_key]["duration"] = duration
+
+            # Enrich method output with captured logs, prints, and failure tracebacks
+            captured_sections = []
+            for stage in ("setup", "call", "teardown"):
+                stage_data = t.get(stage)
+                if isinstance(stage_data, dict):
+                    if stage_data.get("stdout"):
+                        captured_sections.append(f"--- Captured stdout ({stage}) ---\n" + stage_data["stdout"].rstrip())
+                    if stage_data.get("stderr"):
+                        captured_sections.append(f"--- Captured stderr ({stage}) ---\n" + stage_data["stderr"].rstrip())
+                    if stage_data.get("longrepr"):
+                        captured_sections.append(f"--- Failure ({stage}) ---\n" + str(stage_data["longrepr"]).rstrip())
+
+            if captured_sections:
+                extra_text = "\n\n" + "\n\n".join(captured_sections) + "\n"
+                curr_lines = "".join(self.method_outputs[matched_key]["lines"])
+                # Avoid duplicating output if already streamed
+                first_check = captured_sections[0][:35]
+                if first_check not in curr_lines:
+                    self.method_outputs[matched_key]["lines"].append(extra_text)
 
     def get_results(self) -> dict[str, Any]:
         """Returns normalized method outputs dictionary."""
