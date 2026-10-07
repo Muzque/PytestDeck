@@ -92,11 +92,11 @@ export function useTestRunner() {
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        if (data.runs) {
-          methodOutputs.value = {
-            ...methodOutputs.value,
-            ...data.runs,
-          }
+        methodOutputs.value = data.runs || {}
+        try {
+          localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
+        } catch {
+          // Ignore storage errors
         }
       }
     } catch (e) {
@@ -105,6 +105,10 @@ export function useTestRunner() {
   }
 
   loadStoredMethodOutputs()
+
+  watch(targetPath, () => {
+    loadStoredMethodOutputs()
+  })
 
   const clearMethodOutput = async (nodeId) => {
     if (!nodeId) return

@@ -297,6 +297,19 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await fontSelect.selectOption('sf-mono')
     await expect(fontSelect).toHaveValue('sf-mono')
   })
+
+  test('should display clear all history button and trigger clearing', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const clearHistoryBtn = page.locator('#btn-clear-history')
+    await expect(clearHistoryBtn).toBeVisible()
+
+    await clearHistoryBtn.click()
+
+    // Assert that no function row has outcome stripes
+    await expect(page.locator('.row-outcome-passed')).toHaveCount(0)
+    await expect(page.locator('.row-outcome-failed')).toHaveCount(0)
+  })
 })
 
 

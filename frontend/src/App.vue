@@ -41,6 +41,7 @@ const {
   currentMethodOutput,
   runSingleMethod,
   clearMethodOutput,
+  clearAllMethodOutputs,
   methodOutputs
 } = useTestRunner()
 
@@ -77,6 +78,7 @@ const { activeTooltip } = useTooltip()
         @discover="discoverTests"
         @run="runTests"
         @stop="stopTests"
+        @clear-all-history="clearAllMethodOutputs"
       />
 
       <!-- Drag handle to adjust sidebar width -->

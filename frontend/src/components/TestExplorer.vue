@@ -21,7 +21,8 @@ const emit = defineEmits([
   'toggle-select',
   'discover',
   'run',
-  'stop'
+  'stop',
+  'clear-all-history'
 ])
 
 const showRunOptions = ref(false)
@@ -73,6 +74,15 @@ const activeOptionCount = computed(() =>
         >
           <span>⚙️</span>
           <span v-if="activeOptionCount" class="run-options-count">{{ activeOptionCount }}</span>
+        </button>
+
+        <button
+          id="btn-clear-history"
+          class="btn-icon-action btn-clear-history"
+          title="Clear all test history"
+          @click="emit('clear-all-history')"
+        >
+          <span>🗑️</span>
         </button>
       </div>
     </div>
