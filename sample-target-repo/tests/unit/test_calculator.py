@@ -1,6 +1,7 @@
 import pytest
 from calculator import Calculator
 
+@pytest.mark.smoke
 def test_add():
     print("\n[unit] Running test_add: calculating 2 + 3")
     calc = Calculator()
@@ -8,6 +9,7 @@ def test_add():
     print(f"[unit] Result: {result}")
     assert result == 5
 
+@pytest.mark.smoke
 def test_subtract():
     print("\n[unit] Running test_subtract: calculating 10 - 4")
     calc = Calculator()
@@ -35,3 +37,15 @@ def test_divide_by_zero():
     with pytest.raises(ValueError, match="Cannot divide by zero"):
         calc.divide(5, 0)
     print("[unit] Successfully caught ValueError as expected")
+
+
+@pytest.mark.parametrize("a,b,expected", [
+    (1, 1, 2),
+    (10, 20, 30),
+    (-5, 5, 0),
+    (2.5, 3.5, 6.0),
+])
+def test_add_parameterized(a, b, expected):
+    """Verifies addition with diverse inputs via parametrization."""
+    calc = Calculator()
+    assert calc.add(a, b) == expected
