@@ -33,6 +33,20 @@ const stripAnsi = (str) => {
   return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
 }
 
+const formattedDuration = computed(() => {
+  const d = props.latestRun?.duration
+  if (d === null || d === undefined) return null
+  const num = Number(d)
+  if (isNaN(num)) return null
+  if (num < 0.001) {
+    return '<1ms'
+  }
+  if (num < 1.0) {
+    return `${Math.round(num * 1000)}ms`
+  }
+  return `${num.toFixed(2)}s`
+})
+
 const formattedOutput = computed(() => {
   if (!props.latestRun?.output) return ''
   let text = props.latestRun.output
@@ -233,8 +247,8 @@ const copyNodeId = async () => {
             >
               {{ (latestRun.outcome || 'UNKNOWN').toUpperCase() }}
             </span>
-            <span v-if="latestRun && latestRun.duration" class="run-meta-pill">
-              ⏱️ {{ latestRun.duration }}s
+            <span v-if="latestRun && formattedDuration" class="run-meta-pill">
+              ⏱️ {{ formattedDuration }}
             </span>
             <span v-if="latestRun && latestRun.timestamp" class="run-meta-pill">
               🕒 {{ latestRun.timestamp }}

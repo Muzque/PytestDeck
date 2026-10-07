@@ -70,3 +70,43 @@ def test_behave_scenario_output_segmentation():
     assert "features/login.feature::Successful login" in results
     assert "LOG: user verified" in results["features/login.feature::Successful login"]["output"]
     assert "features/login.feature::Invalid login" in results
+
+
+def test_class_targeting_not_single_leaf():
+    class_node = "tests/test_service.py::TestService"
+    collector = MethodOutputCollector(requested_nodes=[class_node])
+    assert not collector.is_single_node
+
+    collector.process_line("tests/test_service.py::TestService::test_one PASSED [ 50%]\n")
+    collector.process_line("tests/test_service.py::TestService::test_two PASSED [100%]\n")
+    results = collector.get_results()
+    assert "tests/test_service.py::TestService::test_one" in results
+    assert "tests/test_service.py::TestService::test_two" in results
+
+
+def test_merge_json_report_stage_durations():
+    collector = MethodOutputCollector()
+    report = {
+        "tests": [
+            {
+                "nodeid": "tests/test_foo.py::test_with_fixtures",
+                "outcome": "passed",
+                "setup": {"duration": 0.0012, "outcome": "passed"},
+                "call": {"duration": 0.0004, "outcome": "passed"},
+                "teardown": {"duration": 0.0001, "outcome": "passed"},
+            },
+            {
+                "nodeid": "tests/test_foo.py::test_setup_failure",
+                "outcome": "failed",
+                "setup": {"duration": 0.0025, "outcome": "failed"},
+                "call": None,
+                "teardown": {"duration": 0.0002, "outcome": "passed"},
+            },
+        ]
+    }
+    collector.merge_json_report(report)
+    res = collector.get_results()
+
+    assert "tests/test_foo.py::test_with_fixtures" in res
+    assert res["tests/test_foo.py::test_with_fixtures"]["duration"] == round(0.0012 + 0.0004 + 0.0001, 4)
+    assert res["tests/test_foo.py::test_setup_failure"]["duration"] == round(0.0025 + 0.0002, 4)

@@ -66,6 +66,9 @@ const formattedDuration = computed(() => {
   if (d === null || d === undefined) return null
   const num = Number(d)
   if (isNaN(num)) return null
+  if (num < 0.001) {
+    return '<1ms'
+  }
   if (num < 1.0) {
     return `${Math.round(num * 1000)}ms`
   }

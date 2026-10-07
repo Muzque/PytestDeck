@@ -13,7 +13,16 @@ class MethodOutputCollector:
 
     def __init__(self, requested_nodes: list[str] | None = None):
         self.requested_nodes = requested_nodes or []
-        self.is_single_node = len(self.requested_nodes) == 1 and "::" in self.requested_nodes[0]
+        is_single_leaf = False
+        if len(self.requested_nodes) == 1:
+            req = self.requested_nodes[0]
+            if "::" in req:
+                parts = req.split("::")
+                leaf = parts[-1]
+                # A class node has 2 parts where the second part starts with capital and not test_
+                if not (len(parts) == 2 and leaf[0].isupper() and not leaf.startswith("test_")):
+                    is_single_leaf = True
+        self.is_single_node = is_single_leaf
         self.single_node_id = self.requested_nodes[0] if self.is_single_node else None
 
         self.method_outputs: dict[str, dict[str, Any]] = {}
@@ -133,7 +142,19 @@ class MethodOutputCollector:
         for t in tests:
             nid = t.get("nodeid", "")
             outcome = t.get("outcome", "unknown")
-            duration = t.get("call", {}).get("duration") or t.get("duration")
+
+            # Sum execution duration across setup, call, and teardown stages
+            total_dur = 0.0
+            has_dur = False
+            for stage in ("setup", "call", "teardown"):
+                stage_data = t.get(stage)
+                if isinstance(stage_data, dict) and "duration" in stage_data:
+                    total_dur += float(stage_data["duration"])
+                    has_dur = True
+            if not has_dur and t.get("duration") is not None:
+                total_dur = float(t["duration"])
+                has_dur = True
+            duration = round(total_dur, 4) if has_dur else None
 
             matched_key = None
             if nid in self.method_outputs:
@@ -150,7 +171,7 @@ class MethodOutputCollector:
 
             self.method_outputs[matched_key]["outcome"] = outcome
             if duration is not None:
-                self.method_outputs[matched_key]["duration"] = round(float(duration), 3)
+                self.method_outputs[matched_key]["duration"] = duration
 
     def get_results(self) -> dict[str, Any]:
         """Returns normalized method outputs dictionary."""
