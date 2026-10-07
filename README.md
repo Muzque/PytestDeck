@@ -19,9 +19,38 @@ Lightweight cross-project Python test control deck built with FastAPI, Vue 3 SPA
 
 ## 🚀 Quick Start
 
-### 1. Deploy Container (Recommended)
+### 1. Local Run Mode (Recommended — Save Time on `uv sync`)
 
-To launch PytestDeck as a containerized service:
+Running PytestDeck directly on your host machine is the **recommended mode**:
+
+```bash
+make run
+```
+
+Open **`http://127.0.0.1:9388`** in your browser.
+
+> [!TIP]
+> **Why `make run` is recommended over Docker**:
+> - **Zero `uv sync` wait time**: `make run` reuses your target repository's existing local `.venv` virtual environment directly. It skips building a separate Linux virtual environment, eliminating download and compilation delays.
+> - **Instant startup**: Auto-loads `.env` (including `TARGET_REPO`, suite paths, and `PORT`) with automatic frontend compilation and backend hot-reloading.
+>
+> Simply ensure your target repository's local environment is synced beforehand:
+> ```bash
+> cd /path/to/target-repo && uv sync --all-groups
+> ```
+> *(`pytest-json-report`, which PytestDeck needs for discovery and reports, is injected dynamically via `uv run --with`; no changes to the target's dependencies are required.)*
+
+To stop the locally running server at any time:
+
+```bash
+make stop
+```
+
+---
+
+### 2. Docker Container Mode
+
+If you prefer to launch PytestDeck as an isolated containerized service:
 
 ```bash
 make docker-run
@@ -41,24 +70,6 @@ Once started, open **`http://127.0.0.1:9388`** in your browser.
 > - **In the Terminal**: Follow progress with `docker logs -f pytestdeck`, or `docker exec pytestdeck cat /cache/env_sync.log`.
 > - The environment, uv cache and Python installs are stored in the `pytestdeck_cache` Docker volume. The **first** start downloads everything; later deploys only re-sync when `uv.lock` changes.
 > - To reset it (e.g. after switching `TARGET_REPO`): `docker compose down -v`.
-
-### 2. Local Run Mode (fastest for local development)
-
-If you are running directly on your host machine without Docker:
-
-```bash
-make run
-```
-
-Open **`http://127.0.0.1:9388`** in your browser.
-
-This is the **recommended mode when the target repo lives on your machine**: `make run` automatically loads `.env` (including `TARGET_REPO`, suite paths, and `PORT`) so your target repo is preselected immediately. In this mode, `uv run` inside the target directory reuses the target's existing local `.venv` directly, so there is no second environment to build and no waiting on startup. Make sure the target's environment is set up first:
-
-```bash
-cd /path/to/target-repo && uv sync --all-groups
-```
-
-*(`pytest-json-report`, which PytestDeck needs for discovery and reports, is injected automatically via `uv run --with`; you don't need to add it to the target's dependencies.)*
 
 ---
 
@@ -122,7 +133,7 @@ inventory-service/                    # TARGET_REPO=/Users/alex/projects/invento
 └── pyproject.toml
 ```
 
-When you start PytestDeck (`make docker-run` or `make run`), the dashboard automatically targets `/Users/alex/projects/inventory-service` and populates the test suites matching your structure.
+When you start PytestDeck (`make run` or `make docker-run`), the dashboard automatically targets `/Users/alex/projects/inventory-service` and populates the test suites matching your structure.
 
 ---
 
