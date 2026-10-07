@@ -309,13 +309,30 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(fontSelect).toHaveValue('sf-mono')
   })
 
-  test('should display clear all history button and trigger clearing', async ({ page }) => {
+  test('should display clear all history button in run options with warning and trigger clearing', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Verify clear history button is NOT present in the main toolbar
+    await expect(page.locator('.explorer-toolbar #btn-clear-history')).not.toBeVisible()
+
+    // Open Run Options modal
+    await page.click('#btn-run-options')
+    await expect(page.locator('.ro-card')).toBeVisible()
+
+    // Verify Danger Zone and warning message are visible
+    await expect(page.locator('.ro-danger-section')).toBeVisible()
+    await expect(page.locator('.ro-danger-warning')).toContainText('Clearing test history permanently removes all stored test outcomes')
 
     const clearHistoryBtn = page.locator('#btn-clear-history')
     await expect(clearHistoryBtn).toBeVisible()
 
     await clearHistoryBtn.click()
+
+    // Verify feedback message appears
+    await expect(page.locator('.ro-history-cleared-msg')).toBeVisible()
+
+    // Close modal
+    await page.click('.ro-close')
 
     // Assert that no function row has outcome stripes
     await expect(page.locator('.row-outcome-passed')).toHaveCount(0)

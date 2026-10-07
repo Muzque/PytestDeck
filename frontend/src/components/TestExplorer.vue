@@ -87,15 +87,6 @@ const activeOptionCount = computed(() =>
           <span>⚙️</span>
           <span v-if="activeOptionCount" class="run-options-count">{{ activeOptionCount }}</span>
         </button>
-
-        <button
-          id="btn-clear-history"
-          class="btn-icon-action btn-clear-history"
-          title="Clear all test history"
-          @click="emit('clear-all-history')"
-        >
-          <span>🗑️</span>
-        </button>
       </div>
     </div>
 
@@ -156,6 +147,7 @@ const activeOptionCount = computed(() =>
       :extraArgs="extraArgs"
       @update:markerFilter="emit('update:markerFilter', $event)"
       @update:extraArgs="emit('update:extraArgs', $event)"
+      @clear-all-history="emit('clear-all-history')"
       @close="showRunOptions = false"
     />
   </div>

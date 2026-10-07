@@ -7,17 +7,19 @@ const props = defineProps({
   extraArgs: { type: String, default: '' }
 })
 
-const emit = defineEmits(['close', 'update:markerFilter', 'update:extraArgs'])
+const emit = defineEmits(['close', 'update:markerFilter', 'update:extraArgs', 'clear-all-history'])
 
 // Local drafts so Cancel discards edits
 const draftMarker = ref('')
 const draftExtra = ref('')
 const markerInputRef = ref(null)
+const historyClearedNotice = ref(false)
 
 watch(() => props.show, async (visible) => {
   if (visible) {
     draftMarker.value = props.markerFilter
     draftExtra.value = props.extraArgs
+    historyClearedNotice.value = false
     await nextTick()
     markerInputRef.value?.focus()
   }
@@ -32,6 +34,14 @@ const apply = () => {
 const clearAll = () => {
   draftMarker.value = ''
   draftExtra.value = ''
+}
+
+const handleClearHistory = () => {
+  emit('clear-all-history')
+  historyClearedNotice.value = true
+  setTimeout(() => {
+    historyClearedNotice.value = false
+  }, 2500)
 }
 
 const onKeydown = (e) => {
@@ -81,6 +91,26 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
             />
             <span class="ro-hint">Appended verbatim to the pytest / behave command</span>
           </label>
+
+          <!-- Danger Zone: Clear History with Warning Message -->
+          <div class="ro-danger-section">
+            <div class="ro-danger-header">
+              <span class="ro-danger-badge">⚠️ Danger Zone</span>
+              <span v-if="historyClearedNotice" class="ro-history-cleared-msg">✓ Test history cleared</span>
+            </div>
+            <p class="ro-danger-warning">
+              Clearing test history permanently removes all stored test outcomes, run durations, and cached terminal reports from the database.
+            </p>
+            <button
+              id="btn-clear-history"
+              type="button"
+              class="btn btn-danger ro-clear-history-btn"
+              title="Clear all test history from database"
+              @click="handleClearHistory"
+            >
+              <span>🗑️ Clear Test History</span>
+            </button>
+          </div>
 
           <div class="ro-footer">
             <button type="button" class="btn btn-secondary ro-clear" @click="clearAll">Clear</button>
@@ -221,9 +251,59 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   padding-top: 4px;
 }
 
-.ro-footer-right {
+.ro-danger-section {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.ro-danger-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ro-danger-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #ef4444;
+  letter-spacing: 0.02em;
+}
+
+.ro-history-cleared-msg {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #10b981;
+}
+
+.ro-danger-warning {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.ro-clear-history-btn {
+  align-self: flex-start;
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ro-clear-history-btn:hover {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: #ef4444;
+  color: #ffffff;
 }
 
 /* Light Theme (Apple Glass Light) Overrides */
@@ -280,6 +360,26 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   background: #f8fafc;
   border-color: #94a3b8;
   color: #0f172a;
+}
+
+:global([data-theme="apple-glass-light"]) .ro-danger-section {
+  background: rgba(254, 242, 242, 0.85);
+  border: 1px solid rgba(252, 165, 165, 0.7);
+}
+
+:global([data-theme="apple-glass-light"]) .ro-danger-warning {
+  color: #7f1d1d;
+}
+
+:global([data-theme="apple-glass-light"]) .ro-clear-history-btn {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+}
+
+:global([data-theme="apple-glass-light"]) .ro-clear-history-btn:hover {
+  background: #fecaca;
+  color: #991b1b;
 }
 
 @keyframes ro-fade {
