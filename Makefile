@@ -1,4 +1,4 @@
-.PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run docker-run
+.PHONY: help test unit-test integration-test acceptance-test e2e-test lint build-frontend run stop docker-run
 
 IMAGE_NAME ?= pytestdeck
 IMAGE_TAG  ?= latest
@@ -47,6 +47,22 @@ build-frontend: ## Build Vue 3 frontend SPA
 run: build-frontend ## Run development server locally
 	@echo "Starting PytestDeck Dev Server..."
 	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port $(or $(PORT),9388) $(ENV_ARG)
+
+stop: ## Stop the locally running PytestDeck dev server
+	@echo "Stopping PytestDeck Dev Server on port $(or $(PORT),9388)..."
+	@PIDS=$$(lsof -ti tcp:$(or $(PORT),9388) 2>/dev/null); \
+	if [ -n "$$PIDS" ]; then \
+		echo "Stopping process(es): $$PIDS"; \
+		kill $$PIDS 2>/dev/null || true; \
+		sleep 0.5; \
+		REMAINING=$$(lsof -ti tcp:$(or $(PORT),9388) 2>/dev/null); \
+		if [ -n "$$REMAINING" ]; then \
+			kill -9 $$REMAINING 2>/dev/null || true; \
+		fi; \
+		echo "PytestDeck stopped."; \
+	else \
+		echo "No PytestDeck server running on port $(or $(PORT),9388)."; \
+	fi
 
 docker-run: ## Build and launch Docker container in detached mode using docker compose
 	@echo "Deploying PytestDeck via docker compose in detached mode..."

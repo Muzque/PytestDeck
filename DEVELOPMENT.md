@@ -38,6 +38,9 @@ The backend is built with FastAPI and uses `uv` for dependency management.
 ```bash
 # Run backend dev server with auto-reload
 make run
+
+# Stop local backend dev server
+make stop
 ```
 
 ### Frontend Development
