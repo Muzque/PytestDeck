@@ -31,6 +31,7 @@ const {
   selectedHistoryId,
   discoverTests,
   toggleSelectNode,
+  clearSelections,
   runTests,
   stopTests,
   selectHistoryItem,
@@ -75,6 +76,7 @@ const { activeTooltip } = useTooltip()
         :selectedNodes="selectedNodes"
         :methodOutputs="methodOutputs"
         @toggle-select="toggleSelectNode"
+        @clear-selection="clearSelections"
         @discover="discoverTests"
         @run="runTests"
         @stop="stopTests"

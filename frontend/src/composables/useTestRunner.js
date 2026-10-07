@@ -367,6 +367,10 @@ export function useTestRunner() {
     selectedNodes.value = newSet
   }
 
+  const clearSelections = () => {
+    selectedNodes.value = new Set()
+  }
+
   const getExecutionNodes = () => {
     const selected = Array.from(selectedNodes.value)
     if (selected.length === 0) return []
@@ -637,6 +641,7 @@ export function useTestRunner() {
     selectedHistoryId,
     discoverTests,
     toggleSelectNode,
+    clearSelections,
     runTests,
     stopTests,
     selectHistoryItem,

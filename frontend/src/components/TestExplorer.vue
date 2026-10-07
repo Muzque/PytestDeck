@@ -19,6 +19,7 @@ const emit = defineEmits([
   'update:markerFilter',
   'update:extraArgs',
   'toggle-select',
+  'clear-selection',
   'discover',
   'run',
   'stop',
@@ -63,6 +64,17 @@ const activeOptionCount = computed(() =>
           title="Refresh Test Tree"
         >
           <span class="icon-refresh" :class="{ 'is-spinning': isDiscovering }">🔄</span>
+        </button>
+
+        <button
+          id="btn-clear-selection"
+          class="btn-icon-action btn-clear-selection"
+          :class="{ 'has-selections': selectedCount > 0 }"
+          :disabled="selectedCount === 0"
+          :title="selectedCount > 0 ? `Clear ${selectedCount} selected test${selectedCount > 1 ? 's' : ''}` : 'Clear selections (none selected)'"
+          @click="emit('clear-selection')"
+        >
+          <span>🧹</span>
         </button>
 
         <button

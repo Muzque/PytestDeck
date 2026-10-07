@@ -388,6 +388,36 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
       await expect(page.locator('.method-terminal-empty')).toBeVisible()
     }
   })
+
+  test('should clear selections in DirectoryTree when clear selections button is clicked', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const clearSelectionBtn = page.locator('#btn-clear-selection')
+    await expect(clearSelectionBtn).toBeVisible()
+    await expect(clearSelectionBtn).toBeDisabled()
+
+    // Expand the first file node
+    const fileToggle = page.locator('.node-row:has(.type-badge.file) .toggle-icon').first()
+    await expect(fileToggle).toBeVisible({ timeout: 15000 })
+    await fileToggle.click()
+
+    // Click on a test function row to select it
+    const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
+    await expect(funcRow).toBeVisible({ timeout: 15000 })
+    await funcRow.click()
+
+    // Button should now be enabled and have has-selections class
+    await expect(clearSelectionBtn).toBeEnabled()
+    await expect(clearSelectionBtn).toHaveClass(/has-selections/)
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (1)')
+
+    // Click the clear selection button
+    await clearSelectionBtn.click()
+
+    // Button should now be disabled and count back to 0
+    await expect(clearSelectionBtn).toBeDisabled()
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (0)')
+  })
 })
 
 

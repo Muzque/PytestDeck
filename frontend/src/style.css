@@ -520,6 +520,12 @@ select {
   cursor: not-allowed;
 }
 
+.btn-clear-selection.has-selections {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+}
+
 .btn-run-options.has-options {
   border-color: rgba(56, 189, 248, 0.5);
   background: rgba(56, 189, 248, 0.12);
