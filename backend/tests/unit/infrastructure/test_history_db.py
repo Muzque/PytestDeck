@@ -32,16 +32,18 @@ def test_history_database_lifecycle(tmp_path):
     assert suffix_run["node_id"] == "test_a.py::test_foo"
 
     # Batch save
-    db.save_runs({
-        "test_b.py::test_bar": {
-            "outcome": "failed",
-            "duration": 0.45,
-            "timestamp": "12:00:00 UTC",
-            "output": "Failure trace",
-            "code_hash": "hash_bar",
-            "file_mtime": 1000.0,
+    db.save_runs(
+        {
+            "test_b.py::test_bar": {
+                "outcome": "failed",
+                "duration": 0.45,
+                "timestamp": "12:00:00 UTC",
+                "output": "Failure trace",
+                "code_hash": "hash_bar",
+                "file_mtime": 1000.0,
+            }
         }
-    })
+    )
 
     all_runs = db.get_all_runs()
     assert len(all_runs) == 2
@@ -67,7 +69,9 @@ def test_history_database_target_repo_untouched(tmp_path, monkeypatch):
     target_repo.mkdir()
 
     db = HistoryDatabase(target_path=target_repo)
-    assert db.db_path == mock_app_root / ".pytestdeck" / "inventory_service" / "history.db"
+    assert (
+        db.db_path == mock_app_root / ".pytestdeck" / "inventory_service" / "history.db"
+    )
     assert db.db_path.exists()
 
     # Verify target repo is completely clean and untouched
@@ -95,3 +99,53 @@ def test_history_database_run_options(tmp_path):
     assert updated["marker_filter"] == "integration"
     assert updated["extra_args"] == ""
 
+
+def test_clean_stale_runs_on_file_modification(tmp_path):
+    repo_dir = tmp_path / "target_repo"
+    repo_dir.mkdir()
+    test_file = repo_dir / "test_example.py"
+    test_file.write_text("def test_one(): pass\n", encoding="utf-8")
+
+    from infrastructure.test_detail_service import compute_file_hash
+
+    initial_hash = compute_file_hash(test_file)
+
+    db_file = tmp_path / "test_history.db"
+    db = HistoryDatabase(db_path=db_file)
+
+    db.save_run(
+        node_id="test_example.py::test_one",
+        outcome="passed",
+        duration=0.05,
+        output="test passed",
+        file_hash=initial_hash,
+    )
+
+    # Clean runs while file is unmodified -> should NOT remove
+    removed = db.clean_stale_runs(repo_dir)
+    assert removed == []
+    assert db.get_run("test_example.py::test_one") is not None
+
+    # Modify file -> hash changes
+    test_file.write_text("def test_one():\n    assert 1 == 1\n", encoding="utf-8")
+    new_hash = compute_file_hash(test_file)
+    assert new_hash != initial_hash
+
+    # Clean runs -> should detect modification and delete run
+    removed = db.clean_stale_runs(repo_dir)
+    assert removed == ["test_example.py::test_one"]
+    assert db.get_run("test_example.py::test_one") is None
+
+    # Save run again with new hash
+    db.save_run(
+        node_id="test_example.py::test_one",
+        outcome="passed",
+        file_hash=new_hash,
+    )
+    assert db.get_run("test_example.py::test_one") is not None
+
+    # Delete test file -> clean_stale_runs should prune it
+    test_file.unlink()
+    removed = db.clean_stale_runs(repo_dir)
+    assert removed == ["test_example.py::test_one"]
+    assert db.get_run("test_example.py::test_one") is None

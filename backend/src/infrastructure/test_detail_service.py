@@ -8,6 +8,17 @@ from typing import Any
 from domain.services import is_safe_subpath, resolve_target_path
 
 
+def compute_file_hash(file_path: Path) -> str | None:
+    """Computes a SHA-256 hash of a file's raw content."""
+    if not file_path.exists() or not file_path.is_file():
+        return None
+    try:
+        content = file_path.read_bytes()
+        return hashlib.sha256(content).hexdigest()[:16]
+    except Exception:
+        return None
+
+
 def parse_gherkin_scenarios(feature_path: Path) -> list[dict[str, Any]]:
     """Parses scenarios, steps, tags, and docstrings from a Gherkin .feature file.
 
@@ -51,7 +62,7 @@ def parse_gherkin_scenarios(feature_path: Path) -> list[dict[str, Any]]:
             in_feature_header = True
             continue
 
-        if line.startswith(('Scenario:', 'Scenario Outline:')):
+        if line.startswith(("Scenario:", "Scenario Outline:")):
             in_feature_header = False
             title = line.split(":", 1)[1].strip()
             current_scenario = {
@@ -67,7 +78,9 @@ def parse_gherkin_scenarios(feature_path: Path) -> list[dict[str, Any]]:
             continue
 
         if in_feature_header and not current_scenario:
-            if not any(line.startswith(k) for k in ('Scenario:', 'Scenario Outline:', '@')):
+            if not any(
+                line.startswith(k) for k in ("Scenario:", "Scenario Outline:", "@")
+            ):
                 feature_description.append(line)
             continue
 
@@ -80,7 +93,9 @@ def parse_gherkin_scenarios(feature_path: Path) -> list[dict[str, Any]]:
                 docstring_lines.append(raw_line)
                 continue
 
-            if any(line.startswith(k) for k in ('Given ', 'When ', 'Then ', 'And ', 'But ')):
+            if any(
+                line.startswith(k) for k in ("Given ", "When ", "Then ", "And ", "But ")
+            ):
                 current_scenario["steps"].append(line)
             else:
                 current_scenario["description_lines"].append(line)
@@ -88,7 +103,9 @@ def parse_gherkin_scenarios(feature_path: Path) -> list[dict[str, Any]]:
     return scenarios
 
 
-def get_feature_detail(feature_path: Path, scenario_name: str | None = None) -> dict[str, Any]:
+def get_feature_detail(
+    feature_path: Path, scenario_name: str | None = None
+) -> dict[str, Any]:
     """Extracts scenario or feature details and docstring from a .feature file.
 
     Args:
@@ -116,9 +133,17 @@ def get_feature_detail(feature_path: Path, scenario_name: str | None = None) -> 
     if scenario_name:
         for sc in scenarios:
             if sc["title"].strip() == scenario_name.strip():
-                desc = "\n".join(sc["description_lines"]).strip() if sc["description_lines"] else None
-                raw_scenario = "\n".join([sc["title"]] + sc["steps"] + sc["description_lines"])
-                code_hash = hashlib.sha256(raw_scenario.strip().encode("utf-8")).hexdigest()[:16]
+                desc = (
+                    "\n".join(sc["description_lines"]).strip()
+                    if sc["description_lines"]
+                    else None
+                )
+                raw_scenario = "\n".join(
+                    [sc["title"]] + sc["steps"] + sc["description_lines"]
+                )
+                code_hash = hashlib.sha256(
+                    raw_scenario.strip().encode("utf-8")
+                ).hexdigest()[:16]
                 return {
                     "name": sc["title"],
                     "type": "scenario",
@@ -136,14 +161,18 @@ def get_feature_detail(feature_path: Path, scenario_name: str | None = None) -> 
                 }
 
     # Fallback to feature file detail
-    raw_feature = "\n".join([feature_title] + feature_desc_lines + [s["title"] for s in scenarios])
+    raw_feature = "\n".join(
+        [feature_title] + feature_desc_lines + [s["title"] for s in scenarios]
+    )
     code_hash = hashlib.sha256(raw_feature.strip().encode("utf-8")).hexdigest()[:16]
     return {
         "name": feature_title or feature_path.name,
         "type": "feature",
         "file_path": str(feature_path),
         "line_number": 1,
-        "docstring": "\n".join(feature_desc_lines).strip() if feature_desc_lines else None,
+        "docstring": "\n".join(feature_desc_lines).strip()
+        if feature_desc_lines
+        else None,
         "class_name": None,
         "parameters": None,
         "decorators": [],
@@ -219,12 +248,19 @@ def get_python_test_detail(file_path: Path, parts: list[str]) -> dict[str, Any]:
 
     # Search for target function / method
     for node in current_scope:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == target_func_name:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == target_func_name
+        ):
             doc = ast.get_docstring(node)
             params = [a.arg for a in node.args.args if a.arg != "self"]
             decorators = [_format_decorator(d) for d in node.decorator_list]
             source_seg = ast.get_source_segment(content, node)
-            code_hash = hashlib.sha256(source_seg.strip().encode("utf-8")).hexdigest()[:16] if source_seg else None
+            code_hash = (
+                hashlib.sha256(source_seg.strip().encode("utf-8")).hexdigest()[:16]
+                if source_seg
+                else None
+            )
             return {
                 "name": node.name,
                 "type": "function",
@@ -232,7 +268,9 @@ def get_python_test_detail(file_path: Path, parts: list[str]) -> dict[str, Any]:
                 "line_number": node.lineno,
                 "docstring": inspect.cleandoc(doc) if doc else None,
                 "class_name": target_class_name,
-                "class_docstring": inspect.cleandoc(class_docstring) if class_docstring else None,
+                "class_docstring": inspect.cleandoc(class_docstring)
+                if class_docstring
+                else None,
                 "parameters": params,
                 "decorators": decorators,
                 "steps": None,
@@ -248,7 +286,11 @@ def get_python_test_detail(file_path: Path, parts: list[str]) -> dict[str, Any]:
             if isinstance(node, ast.ClassDef) and node.name == target_class_name:
                 doc = ast.get_docstring(node)
                 source_seg = ast.get_source_segment(content, node)
-                code_hash = hashlib.sha256(source_seg.strip().encode("utf-8")).hexdigest()[:16] if source_seg else None
+                code_hash = (
+                    hashlib.sha256(source_seg.strip().encode("utf-8")).hexdigest()[:16]
+                    if source_seg
+                    else None
+                )
                 return {
                     "name": node.name,
                     "type": "class",
@@ -282,14 +324,34 @@ def get_python_test_detail(file_path: Path, parts: list[str]) -> dict[str, Any]:
     }
 
 
-def get_node_code_metadata(target_dir: Path, node_id: str) -> tuple[str | None, float | None]:
+def resolve_test_file(target_dir: Path, rel_file: str) -> Path | None:
+    """Resolves relative test file path against target directory with subfolder fallbacks."""
+    candidate = (target_dir / rel_file).resolve()
+    if candidate.exists() and candidate.is_file():
+        return candidate
+    candidate = (target_dir / "backend" / rel_file).resolve()
+    if candidate.exists() and candidate.is_file():
+        return candidate
+    rel_name = Path(rel_file).name
+    try:
+        for p in target_dir.rglob(rel_name):
+            if p.is_file() and (str(p).endswith(rel_file) or rel_file.endswith(p.name)):
+                return p
+    except Exception:
+        pass
+    return None
+
+
+def get_node_code_metadata(
+    target_dir: Path, node_id: str
+) -> tuple[str | None, float | None]:
     """Helper to quickly obtain (code_hash, file_mtime) for a given node ID."""
     try:
         parts = node_id.split("::")
         rel_file = parts[0]
         sub_parts = parts[1:] if len(parts) > 1 else []
-        full_path = (target_dir / rel_file).resolve()
-        if not full_path.exists():
+        full_path = resolve_test_file(target_dir, rel_file)
+        if not full_path or not full_path.exists():
             return None, None
 
         if rel_file.endswith(".feature"):
@@ -324,8 +386,8 @@ def extract_test_detail(target_path: str, node_id: str) -> dict[str, Any]:
     rel_file = parts[0]
     sub_parts = parts[1:] if len(parts) > 1 else []
 
-    full_path = (target_dir / rel_file).resolve()
-    if not full_path.exists():
+    full_path = resolve_test_file(target_dir, rel_file)
+    if not full_path or not full_path.exists():
         raise ValueError(f"Test file not found: {rel_file}")
 
     if rel_file.endswith(".feature"):
@@ -340,20 +402,36 @@ def extract_test_detail(target_path: str, node_id: str) -> dict[str, Any]:
     # Check HistoryDatabase for stored run and code modification comparison
     try:
         from infrastructure.history_db import HistoryDatabase
+
         db = HistoryDatabase(target_path=target_dir)
         stored_run = db.get_run(node_id)
         if stored_run:
-            res["latest_run"] = stored_run
+            curr_file_hash = compute_file_hash(full_path)
+            stored_file_hash = stored_run.get("file_hash")
             curr_hash = res.get("code_hash")
             stored_hash = stored_run.get("code_hash")
             curr_mtime = res.get("file_mtime")
             stored_mtime = stored_run.get("file_mtime")
 
-            if curr_hash and stored_hash:
-                res["modified_since_run"] = bool(curr_hash != stored_hash)
-            elif curr_mtime and stored_mtime:
-                res["modified_since_run"] = bool(curr_mtime > stored_mtime + 1.0)
+            is_modified = False
+            if (
+                stored_file_hash
+                and curr_file_hash != stored_file_hash
+                or curr_hash
+                and stored_hash
+                and curr_hash != stored_hash
+                or curr_mtime
+                and stored_mtime
+                and curr_mtime > stored_mtime + 1.0
+            ):
+                is_modified = True
+
+            if is_modified:
+                db.delete_run(node_id)
+                res["latest_run"] = None
+                res["modified_since_run"] = True
             else:
+                res["latest_run"] = stored_run
                 res["modified_since_run"] = False
         else:
             res["latest_run"] = None

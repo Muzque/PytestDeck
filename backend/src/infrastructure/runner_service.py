@@ -94,7 +94,6 @@ class SubprocessRunnerService:
             src_paths.append(existing_pythonpath)
         env["PYTHONPATH"] = os.pathsep.join(src_paths)
 
-
         from infrastructure.output_splitter import MethodOutputCollector
 
         output_collector = MethodOutputCollector(requested_nodes=nodes)
@@ -108,7 +107,9 @@ class SubprocessRunnerService:
             start_new_session=True,
         )
 
-        yield json.dumps({"type": "status", "data": f"Started process: {' '.join(cmd)}\r\n"})
+        yield json.dumps(
+            {"type": "status", "data": f"Started process: {' '.join(cmd)}\r\n"}
+        )
 
         if self.proc.stdout:
             while True:
@@ -132,26 +133,40 @@ class SubprocessRunnerService:
 
         method_outputs = output_collector.get_results()
 
-        # Persist method outputs to SQLite database with code_hash and file_mtime
+        # Persist method outputs to SQLite database with code_hash, file_hash, and file_mtime
         try:
             from infrastructure.history_db import HistoryDatabase
-            from infrastructure.test_detail_service import get_node_code_metadata
+            from infrastructure.test_detail_service import (
+                compute_file_hash,
+                get_node_code_metadata,
+                resolve_test_file,
+            )
+
             db = HistoryDatabase(target_path=self.target_path)
+            file_hash_cache: dict[str, str | None] = {}
             for nid, record in method_outputs.items():
                 code_hash, file_mtime = get_node_code_metadata(self.target_path, nid)
+                rel_file = nid.split("::")[0]
+                if rel_file not in file_hash_cache:
+                    full_path = resolve_test_file(Path(self.target_path), rel_file)
+                    file_hash_cache[rel_file] = (
+                        compute_file_hash(full_path) if full_path else None
+                    )
                 record["code_hash"] = code_hash
                 record["file_mtime"] = file_mtime
+                record["file_hash"] = file_hash_cache[rel_file]
             db.save_runs(method_outputs)
         except Exception:
             pass
 
-        yield json.dumps({
-            "type": "finished",
-            "exit_code": exit_code,
-            "summary": summary,
-            "method_outputs": method_outputs,
-        })
-
+        yield json.dumps(
+            {
+                "type": "finished",
+                "exit_code": exit_code,
+                "summary": summary,
+                "method_outputs": method_outputs,
+            }
+        )
 
     async def abort(self) -> None:
         """Aborts the currently running subprocess execution cleanly."""
@@ -169,6 +184,7 @@ class SubprocessRunnerService:
 
                 if pgid and hasattr(os, "killpg"):
                     import signal
+
                     os.killpg(pgid, signal.SIGTERM)
                 else:
                     self.proc.terminate()
@@ -177,9 +193,9 @@ class SubprocessRunnerService:
                 if self.proc.returncode is None:
                     if pgid and hasattr(os, "killpg"):
                         import signal
+
                         os.killpg(pgid, signal.SIGKILL)
                     else:
                         self.proc.kill()
             except (ProcessLookupError, OSError):
                 pass
-

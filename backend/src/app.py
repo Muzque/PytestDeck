@@ -12,7 +12,8 @@ load_dotenv(find_dotenv(usecwd=True))
 from api.config import router as config_router
 from api.discover import router as discover_router
 from api.health import router as health_router
-from api.history import router as history_router, run_options_router
+from api.history import router as history_router
+from api.history import run_options_router
 from api.runner import router as runner_router
 
 app = FastAPI(title="PytestDeck Core API", version="0.1.0")
@@ -36,7 +37,9 @@ app.include_router(run_options_router)
 frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 if frontend_dist.exists():
-    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="static")
+    app.mount(
+        "/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="static"
+    )
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):

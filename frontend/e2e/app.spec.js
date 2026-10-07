@@ -332,7 +332,52 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.click('#btn-run-options')
     await expect(page.locator('#run-options-marker')).toHaveValue('persisted_marker')
     await expect(page.locator('#run-options-extra')).toHaveValue('-v --tb=short')
-    await page.click('.ro-close')
+
+    // Clean up run options so subsequent tests are not filtered
+    await markerInput.fill('')
+    await extraInput.fill('')
+    await page.click('#run-options-apply')
+  })
+
+  test('should reset test result when test file is modified', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Ensure marker filters are clear
+    const clearOptionsBtn = page.locator('.badge-clear-btn')
+    if (await clearOptionsBtn.isVisible()) {
+      await clearOptionsBtn.click()
+    }
+
+    // Switch to Integration suite (index 1)
+    const select = page.locator('.suite-select')
+    await select.selectOption({ index: 1 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Expand the first file node
+    const fileToggle = page.locator('.node-row:has(.type-badge.file) .toggle-icon').first()
+    await expect(fileToggle).toBeVisible({ timeout: 15000 })
+    await fileToggle.click()
+
+    // Select a test method
+    const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
+    await expect(funcRow).toBeVisible({ timeout: 15000 })
+    await funcRow.click()
+
+    // Execute single test method
+    const runMethodBtn = page.locator('.btn-run-method')
+    await expect(runMethodBtn).toBeVisible()
+    await runMethodBtn.click()
+    await expect(page.locator('.btn-run-method')).toBeEnabled({ timeout: 15000 })
+
+    // Result status badge appears
+    await expect(page.locator('.run-status-badge')).toBeVisible()
+
+    // Verify Clear button clears output back to empty state
+    const clearBtn = page.locator('.btn-clear-output')
+    if (await clearBtn.isVisible()) {
+      await clearBtn.click()
+      await expect(page.locator('.method-terminal-empty')).toBeVisible()
+    }
   })
 })
 

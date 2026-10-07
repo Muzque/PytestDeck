@@ -63,6 +63,16 @@ export function useTestRunner() {
       if (res.ok) {
         const data = await res.json()
         selectedTestDetail.value = data
+        if (data && !data.latest_run && nodeId && methodOutputs.value[nodeId]) {
+          const updated = { ...methodOutputs.value }
+          delete updated[nodeId]
+          methodOutputs.value = updated
+          try {
+            localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
+          } catch {
+            // Ignore storage errors
+          }
+        }
       } else {
         selectedTestDetail.value = null
       }
@@ -105,6 +115,12 @@ export function useTestRunner() {
   }
 
   loadStoredMethodOutputs()
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', () => {
+      loadStoredMethodOutputs()
+    })
+  }
 
   watch(targetPath, () => {
     loadStoredMethodOutputs()
@@ -196,7 +212,11 @@ export function useTestRunner() {
     if (!extraArgs.value.includes('-s')) {
       extraArgs.value = extraArgs.value ? `${extraArgs.value} -s` : '-s'
     }
+    const wasDetail = activeTab.value === 'detail'
     runTests()
+    if (wasDetail) {
+      activeTab.value = 'detail'
+    }
   }
 
   watch([singleSelectedNode, isDetailSuite], async ([node, detailSuite]) => {
@@ -304,17 +324,18 @@ export function useTestRunner() {
         const idSet = new Set()
         collectAllChildIds(data.tree, idSet)
         try {
-          fetch('/api/test-runs/prune', {
+          await fetch('/api/test-runs/prune', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               target_path: targetPath.value || '',
               valid_nodes: Array.from(idSet)
             })
-          }).catch(() => {})
+          })
         } catch {
           // Ignore network errors during prune
         }
+        await loadStoredMethodOutputs()
       }
     } catch (err) {
       console.error(err)

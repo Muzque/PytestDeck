@@ -19,10 +19,20 @@ class PruneRunsRequest(BaseModel):
 @router.get("")
 async def get_test_runs(
     target_path: str = Query("", description="Target repo path"),
-    node_id: str | None = Query(None, description="Optional node_id to fetch single run"),
+    node_id: str | None = Query(
+        None, description="Optional node_id to fetch single run"
+    ),
 ):
     try:
         db = HistoryDatabase(target_path=target_path)
+        try:
+            from domain.services import resolve_target_path
+
+            resolved_target = resolve_target_path(target_path)
+            db.clean_stale_runs(resolved_target)
+        except Exception:
+            pass
+
         if node_id:
             run = db.get_run(node_id)
             return {"run": run}
@@ -79,7 +89,10 @@ async def save_run_options(req: SaveRunOptionsRequest):
     try:
         db = HistoryDatabase(target_path=req.target_path)
         db.save_run_options(marker_filter=req.marker_filter, extra_args=req.extra_args)
-        return {"success": True, "marker_filter": req.marker_filter, "extra_args": req.extra_args}
+        return {
+            "success": True,
+            "marker_filter": req.marker_filter,
+            "extra_args": req.extra_args,
+        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-

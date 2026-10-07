@@ -249,6 +249,13 @@ const copyNodeId = async () => {
             >
               {{ (latestRun.outcome || 'UNKNOWN').toUpperCase() }}
             </span>
+            <span 
+              v-else-if="detail && detail.modified_since_run" 
+              class="run-status-badge status-modified"
+              title="Test code has been modified since last run; previous test result was reset"
+            >
+              MODIFIED (RESET)
+            </span>
             <span v-if="latestRun && formattedDuration" class="run-meta-pill">
               ⏱️ {{ formattedDuration }}
             </span>
@@ -300,8 +307,10 @@ const copyNodeId = async () => {
           <pre class="method-terminal-text" v-html="formattedOutput"></pre>
         </div>
         <div v-else class="method-terminal-empty">
-          <span class="terminal-empty-icon">⚪</span>
-          <p class="empty-text">No execution output recorded for this test method yet.</p>
+          <span class="terminal-empty-icon">{{ (detail && detail.modified_since_run) ? '🔄' : '⚪' }}</span>
+          <p class="empty-text">
+            {{ (detail && detail.modified_since_run) ? 'Test code was modified since last run. Previous result has been reset.' : 'No execution output recorded for this test method yet.' }}
+          </p>
           <span class="empty-hint">Click <strong>{{ detail.type === 'scenario' ? '▶ Run Scenario' : '▶ Run Test (-s)' }}</strong> to execute this test and capture console logs.</span>
         </div>
 
@@ -772,6 +781,13 @@ export default {
   background: rgba(251, 191, 36, 0.2);
   color: #fbbf24;
   border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.status-modified {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.15);
 }
 
 .status-running {
