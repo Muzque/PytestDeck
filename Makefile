@@ -48,20 +48,21 @@ run: build-frontend ## Run development server locally
 	@echo "Starting PytestDeck Dev Server..."
 	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port $(or $(PORT),9388) $(ENV_ARG)
 
-stop: ## Stop the locally running PytestDeck dev server
+stop: ## Stop the locally running PytestDeck dev server (macOS and Linux)
 	@echo "Stopping PytestDeck Dev Server on port $(or $(PORT),9388)..."
-	@PIDS=$$(lsof -ti tcp:$(or $(PORT),9388) 2>/dev/null); \
+	@PORT_NUM=$(or $(PORT),9388); \
+	PIDS=$$(lsof -ti tcp:$$PORT_NUM 2>/dev/null || fuser $$PORT_NUM/tcp 2>/dev/null || pgrep -f "uvicorn app:app.*$$PORT_NUM" 2>/dev/null); \
 	if [ -n "$$PIDS" ]; then \
 		echo "Stopping process(es): $$PIDS"; \
 		kill $$PIDS 2>/dev/null || true; \
 		sleep 0.5; \
-		REMAINING=$$(lsof -ti tcp:$(or $(PORT),9388) 2>/dev/null); \
+		REMAINING=$$(lsof -ti tcp:$$PORT_NUM 2>/dev/null || fuser $$PORT_NUM/tcp 2>/dev/null); \
 		if [ -n "$$REMAINING" ]; then \
 			kill -9 $$REMAINING 2>/dev/null || true; \
 		fi; \
 		echo "PytestDeck stopped."; \
 	else \
-		echo "No PytestDeck server running on port $(or $(PORT),9388)."; \
+		echo "No PytestDeck server running on port $$PORT_NUM."; \
 	fi
 
 docker-run: ## Build and launch Docker container in detached mode using docker compose
