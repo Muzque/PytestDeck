@@ -7,9 +7,21 @@ from domain.models import NodeType, TestNode
 def resolve_target_path(target_path: str) -> Path:
     """Resolves and validates target directory path with fallback for container runtime environments."""
     if target_path:
-        p = Path(target_path).expanduser().resolve()
-        if p.exists() and p.is_dir():
-            return p
+        p = Path(target_path).expanduser()
+        if not p.is_absolute():
+            cand = (Path.cwd() / p).resolve()
+            if cand.exists() and cand.is_dir():
+                return cand
+            app_root = Path.cwd().resolve()
+            if app_root.name == "backend" and (app_root.parent / "backend").exists():
+                cand_parent = (app_root.parent / p).resolve()
+                if cand_parent.exists() and cand_parent.is_dir():
+                    return cand_parent
+        else:
+            resolved = p.resolve()
+            if resolved.exists() and resolved.is_dir():
+                return resolved
+
         # Container fallback when host path is passed as TARGET_REPO env var
         target_vol = Path("/target")
         if target_vol.exists() and target_vol.is_dir():
@@ -21,9 +33,22 @@ def resolve_target_path(target_path: str) -> Path:
     if target_vol.exists() and target_vol.is_dir():
         return target_vol.resolve()
 
+    # Check TARGET_REPO env var if set
+    import os
+    env_target = os.getenv("TARGET_REPO", "")
+    if env_target:
+        try:
+            return resolve_target_path(env_target)
+        except Exception:
+            pass
+
     app_root = Path.cwd().resolve()
     if app_root.name == "backend" and (app_root.parent / "backend").exists():
         app_root = app_root.parent
+
+    sample_repo = app_root / "sample-target-repo"
+    if sample_repo.exists() and sample_repo.is_dir():
+        return sample_repo.resolve()
 
     if app_root.exists() and app_root.is_dir():
         return app_root

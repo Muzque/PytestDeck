@@ -7,48 +7,47 @@ from app import app
 client = TestClient(app)
 
 
-def get_repo_root() -> str:
+def get_sample_target_repo() -> str:
     cwd = Path.cwd().resolve()
-    return str(cwd.parent if cwd.name == "backend" else cwd)
+    root = cwd.parent if cwd.name == "backend" else cwd
+    return str(root / "sample-target-repo")
 
 
 def test_api_test_detail_endpoint_pytest_function():
-    repo_root = get_repo_root()
-    node_id = (
-        "backend/tests/integration/api/test_api_discover.py::test_api_discover_endpoint"
-    )
+    target_repo = get_sample_target_repo()
+    node_id = "tests/unit/test_calculator.py::test_add"
 
     response = client.post(
         "/api/test-detail",
-        json={"target_path": repo_root, "node_id": node_id},
+        json={"target_path": target_repo, "node_id": node_id},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "test_api_discover_endpoint"
+    assert data["name"] == "test_add"
     assert data["type"] == "function"
-    assert "backend/tests/integration/api/test_api_discover.py" in data["file_path"]
+    assert "tests/unit/test_calculator.py" in data["file_path"]
 
 
 def test_api_test_detail_endpoint_behave_scenario():
-    repo_root = get_repo_root()
+    target_repo = get_sample_target_repo()
     node_id = (
-        "backend/tests/acceptance/features/api_discovery.feature::"
-        "Discovering tests in the backend unit test suite"
+        "tests/acceptance/features/calculator.feature::"
+        "Addition of two numbers"
     )
 
     response = client.post(
         "/api/test-detail",
-        json={"target_path": repo_root, "node_id": node_id},
+        json={"target_path": target_repo, "node_id": node_id},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "Discovering tests in the backend unit test suite"
+    assert data["name"] == "Addition of two numbers"
     assert data["type"] == "scenario"
-    assert len(data["steps"]) >= 4
+    assert len(data["steps"]) >= 3
 
 
 def test_api_test_detail_invalid_node():
-    repo_root = get_repo_root()
+    repo_root = get_sample_target_repo()
     response = client.post(
         "/api/test-detail",
         json={

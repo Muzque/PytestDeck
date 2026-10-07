@@ -9,7 +9,7 @@ from infrastructure.discovery_service import (
 def test_get_env_config_defaults(monkeypatch):
     monkeypatch.delenv("UNIT_DIR", raising=False)
     cfg = get_env_config()
-    assert cfg["unit_dir"] == "backend/tests/unit"
+    assert cfg["unit_dir"] == "tests/unit"
 
 
 def test_get_env_config_custom(monkeypatch):

@@ -7,17 +7,18 @@ from app import app
 client = TestClient(app)
 
 
-def get_repo_root() -> str:
+def get_sample_target_repo() -> str:
     cwd = Path.cwd().resolve()
-    return str(cwd.parent if cwd.name == "backend" else cwd)
+    root = cwd.parent if cwd.name == "backend" else cwd
+    return str(root / "sample-target-repo")
 
 
 def test_ws_run_endpoint():
     with client.websocket_connect("/ws/run") as websocket:
         websocket.send_json({
             "action": "START",
-            "target_path": get_repo_root(),
-            "nodes": ["backend/tests/unit/domain/test_models.py"]
+            "target_path": get_sample_target_repo(),
+            "nodes": ["tests/unit/test_calculator.py"],
         })
         msg = websocket.receive_json()
         assert msg.get("type") == "status"
@@ -46,7 +47,7 @@ def test_ws_run_unsafe_node_path():
     with client.websocket_connect("/ws/run") as websocket:
         websocket.send_json({
             "action": "START",
-            "target_path": get_repo_root(),
+            "target_path": get_sample_target_repo(),
             "nodes": ["../../etc/passwd"]
         })
         msg = websocket.receive_json()

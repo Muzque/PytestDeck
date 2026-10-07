@@ -41,7 +41,7 @@ def step_config_contains(context, key):
 
 @when('a discover request is sent for suite "{suite_path}"')
 def step_discover_request(context, suite_path):
-    repo_path = str(Path(__file__).resolve().parents[5])
+    repo_path = str(Path(__file__).resolve().parents[5] / "sample-target-repo")
     context.response = context.client.post(
         "/api/discover",
         json={"target_path": repo_path, "suite_rel_path": suite_path},
@@ -77,7 +77,7 @@ def step_discover_tree_name(context, expected_name):
 
 @when('a test detail request is sent for node "{node_id}"')
 def step_detail_request(context, node_id):
-    repo_path = str(Path(__file__).resolve().parents[5])
+    repo_path = str(Path(__file__).resolve().parents[5] / "sample-target-repo")
     context.response = context.client.post(
         "/api/test-detail",
         json={"target_path": repo_path, "node_id": node_id},

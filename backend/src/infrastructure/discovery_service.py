@@ -18,9 +18,9 @@ def get_env_config() -> dict[str, Any]:
         dict[str, Any]: Dictionary containing configured suite paths and environment settings.
     """
     return {
-        "unit_dir": os.getenv("UNIT_DIR", "backend/tests/unit"),
-        "integration_dir": os.getenv("INTEGRATION_DIR", "backend/tests/integration"),
-        "acceptance_dir": os.getenv("ACCEPTANCE_DIR", "backend/tests/acceptance"),
+        "unit_dir": os.getenv("UNIT_DIR", "tests/unit"),
+        "integration_dir": os.getenv("INTEGRATION_DIR", "tests/integration"),
+        "acceptance_dir": os.getenv("ACCEPTANCE_DIR", "tests/acceptance"),
     }
 
 
