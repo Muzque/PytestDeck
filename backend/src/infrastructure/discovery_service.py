@@ -11,16 +11,34 @@ from infrastructure.report_service import (
 )
 
 
-def get_env_config() -> dict[str, Any]:
-    """Retrieves PytestDeck configuration values from environment variables.
+def get_env_config(target_path: str = "") -> dict[str, Any]:
+    """Retrieves PytestDeck configuration values from environment variables or target path.
 
     Returns:
         dict[str, Any]: Dictionary containing configured suite paths and environment settings.
     """
+    from domain.services import resolve_target_path
+
+    unit_env = os.getenv("UNIT_DIR")
+    int_env = os.getenv("INTEGRATION_DIR")
+    acc_env = os.getenv("ACCEPTANCE_DIR")
+
+    if target_path:
+        try:
+            target_dir = resolve_target_path(target_path)
+            if (target_dir / "tests/unit").exists():
+                return {
+                    "unit_dir": "tests/unit",
+                    "integration_dir": "tests/integration",
+                    "acceptance_dir": "tests/acceptance",
+                }
+        except Exception:
+            pass
+
     return {
-        "unit_dir": os.getenv("UNIT_DIR", "tests/unit"),
-        "integration_dir": os.getenv("INTEGRATION_DIR", "tests/integration"),
-        "acceptance_dir": os.getenv("ACCEPTANCE_DIR", "tests/acceptance"),
+        "unit_dir": unit_env or "tests/unit",
+        "integration_dir": int_env or "tests/integration",
+        "acceptance_dir": acc_env or "tests/acceptance",
     }
 
 

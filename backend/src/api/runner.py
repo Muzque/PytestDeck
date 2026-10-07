@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -29,15 +28,23 @@ async def websocket_run(websocket: WebSocket):
             marker = msg.get("marker", None)
             extra_args = msg.get("extra_args", [])
 
-            if not target_path or not Path(target_path).exists():
+            from domain.services import resolve_target_path
+
+            try:
+                resolved_target = resolve_target_path(target_path)
+            except Exception:
+                resolved_target = None
+
+            if not target_path or not resolved_target or not resolved_target.exists():
                 await websocket.send_json({"type": "error", "message": f"Invalid target_path: {target_path}"})
                 await websocket.close()
                 return
 
-            runner = SubprocessRunnerService(target_path)
+            target_dir_str = str(resolved_target)
+            runner = SubprocessRunnerService(target_dir_str)
 
-            prune_stale_reports(target_path)
-            report_file = create_report_path(target_path, prefix="run")
+            prune_stale_reports(target_dir_str)
+            report_file = create_report_path(target_dir_str, prefix="run")
             report_json_path = str(report_file)
 
             try:

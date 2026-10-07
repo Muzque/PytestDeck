@@ -273,7 +273,7 @@ const copyNodeId = async () => {
 
           <div class="run-actions">
             <button 
-              v-if="latestRun && latestRun.output" 
+              v-if="latestRun" 
               class="btn-clear-output"
               @click="$emit('clear-single-output', detail.node_id)"
               title="Clear stored run output for this test method"

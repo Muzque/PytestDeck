@@ -578,9 +578,12 @@ export function useTestRunner() {
     }, 2000)
   }
 
-  const fetchConfig = async () => {
+  const fetchConfig = async (overrideTarget = null) => {
     try {
-      const res = await fetch('/api/config')
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+      const queryTarget = overrideTarget || (urlParams ? urlParams.get('target_path') : null)
+      const targetQuery = queryTarget ? `?target_path=${encodeURIComponent(queryTarget)}` : ''
+      const res = await fetch(`/api/config${targetQuery}`)
       if (res.ok) {
         const data = await res.json()
         if (data.config) {
@@ -591,7 +594,9 @@ export function useTestRunner() {
           ]
           activeSuite.value = availableSuites.value[0].path
         }
-        if (data.default_target_path) {
+        if (queryTarget) {
+          targetPath.value = queryTarget
+        } else if (data.default_target_path) {
           targetPath.value = data.default_target_path
         }
       }
@@ -648,7 +653,8 @@ export function useTestRunner() {
     runSingleMethod,
     getMethodOutput,
     clearMethodOutput,
-    clearAllMethodOutputs
+    clearAllMethodOutputs,
+    fetchConfig
   }
 }
 

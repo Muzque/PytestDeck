@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('PytestDeck E2E Frontend Suite', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/?target_path=./sample-target-repo')
   })
 
   test('should render header branding and suite controls', async ({ page }) => {
@@ -57,8 +57,11 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     const terminal = page.locator('.terminal-wrapper')
     await expect(terminal).toBeVisible()
 
-    // Wait for execution completion (Run button returns to non-running state)
-    await expect(runBtn).toBeVisible({ timeout: 15000 })
+    // Wait for execution completion (Stop button appears then disappears)
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+    await expect(runBtn).toBeVisible()
 
     // Verify Copy Output button is enabled and clickable
     const copyBtn = page.locator('.btn-copy-terminal')
@@ -69,7 +72,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
     // Switch to Metrics & Summary tab
     await page.click('button:has-text("Metrics & Summary")')
-    await expect(page.locator('.card-exit')).toBeVisible()
+    await expect(page.locator('.card-exit')).toBeVisible({ timeout: 10000 })
     await expect(page.locator('.card-exit .value')).not.toBeEmpty()
 
     // Switch to Execution History tab
@@ -83,7 +86,10 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.click('.btn-primary')
     
     // Wait for run to finish
-    await page.waitForSelector('.btn-primary', { timeout: 15000 })
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+    await expect(page.locator('.btn-primary')).toBeVisible()
 
     // Click JSON Report tab
     await page.click('button:has-text("JSON Report")')
@@ -111,7 +117,15 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
     // Click Run Selected
     await page.click('.btn-primary')
-    await page.waitForSelector('.btn-primary', { timeout: 15000 })
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Clean up run options so subsequent tests are not filtered
+    await page.click('#btn-run-options')
+    await markerInput.fill('')
+    await extraInput.fill('')
+    await page.click('#run-options-apply')
   })
 
   test('should handle stop execution action cleanly', async ({ page }) => {
@@ -122,9 +136,8 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     
     // Stop button should appear
     const stopBtn = page.locator('.btn-danger')
-    if (await stopBtn.isVisible()) {
-      await stopBtn.click()
-    }
+    await expect(stopBtn).toBeVisible({ timeout: 10000 })
+    await stopBtn.click()
 
     // Run button should become visible again
     await expect(page.locator('.btn-primary')).toBeVisible({ timeout: 10000 })
@@ -226,11 +239,9 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(runMethodBtn).toBeVisible()
     await runMethodBtn.click()
 
-    // Wait for method execution to complete
-    await expect(page.locator('.btn-run-method')).toBeEnabled({ timeout: 15000 })
-
-    // Verify status badge appears
-    await expect(page.locator('.run-status-badge')).toBeVisible()
+    // Wait for method execution to complete and status badge to appear
+    await expect(page.locator('.run-status-badge')).toBeVisible({ timeout: 20000 })
+    await expect(runMethodBtn).toBeEnabled({ timeout: 10000 })
 
     // Verify Clear button is visible and clears output
     const clearBtn = page.locator('.btn-clear-output')
@@ -367,10 +378,8 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     const runMethodBtn = page.locator('.btn-run-method')
     await expect(runMethodBtn).toBeVisible()
     await runMethodBtn.click()
-    await expect(page.locator('.btn-run-method')).toBeEnabled({ timeout: 15000 })
-
-    // Result status badge appears
-    await expect(page.locator('.run-status-badge')).toBeVisible()
+    await expect(page.locator('.run-status-badge')).toBeVisible({ timeout: 20000 })
+    await expect(runMethodBtn).toBeEnabled({ timeout: 10000 })
 
     // Verify Clear button clears output back to empty state
     const clearBtn = page.locator('.btn-clear-output')
