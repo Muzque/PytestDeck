@@ -2,7 +2,7 @@
 
 Lightweight cross-project Python test control deck built with FastAPI, Vue 3 SPA, and Domain-Driven Design (DDD).
 
-![PytestDeck Dashboard](frontend/src/assets/hero.png)
+![PytestDeck Dashboard](docs/screenshot.png)
 
 ---
 
