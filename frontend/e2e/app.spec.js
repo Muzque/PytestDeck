@@ -48,6 +48,9 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
   test('should run tests and update execution metrics & history', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
     
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+
     // Click Run Selected button
     const runBtn = page.locator('.btn-primary')
     await expect(runBtn).toBeVisible()
@@ -59,9 +62,11 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
     // Wait for execution completion (Stop button appears then disappears)
     const stopBtn = page.locator('.btn-danger')
-    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(calcFileRow).toHaveClass(/row-has-running/)
     await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
     await expect(runBtn).toBeVisible()
+    await expect(calcFileRow).toHaveClass(/row-has-passed/)
 
     // Verify Copy Output button is enabled and clickable
     const copyBtn = page.locator('.btn-copy-terminal')
@@ -83,6 +88,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
   test('should display raw JSON report tab after execution', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
+    await page.locator('.node-row:has-text("test_calculator.py") .node-checkbox').click()
     await page.click('.btn-primary')
     
     // Wait for run to finish
@@ -130,17 +136,22 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
   test('should handle stop execution action cleanly', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
+    const rootDirRow = page.locator('.node-row:has(.type-badge.directory)').first()
     
     // Start test execution
     await page.click('.btn-primary')
     
-    // Stop button should appear
+    // Stop button should appear and tree checkboxes should be locked while running
     const stopBtn = page.locator('.btn-danger')
     await expect(stopBtn).toBeVisible({ timeout: 10000 })
+    await expect(rootDirRow).toHaveClass(/row-has-running/)
+    await expect(rootDirRow.locator('.node-checkbox')).toBeDisabled()
     await stopBtn.click()
 
-    // Run button should become visible again
+    // Run button should become visible again and running state / checkbox lock cleared
     await expect(page.locator('.btn-primary')).toBeVisible({ timeout: 10000 })
+    await expect(rootDirRow).not.toHaveClass(/row-has-running/)
+    await expect(rootDirRow.locator('.node-checkbox')).toBeEnabled()
   })
 
   test('should display Detail Info tab when a single test method is selected in Integration suite', async ({ page }) => {

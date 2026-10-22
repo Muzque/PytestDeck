@@ -55,11 +55,13 @@ description: >-
 2. **實際觀測 CLI 原始輸出與時間尺度 (Raw Output & Pacing Inspection)**：
    - **禁止假設 CLI 輸出格式**：凡涉及解析 `stdout` / WebSocket 串流（如 `pytest -v -s`、`log_cli = true`、fixture teardown、自訂 print banner 或 `behave` 步驟），必須先在 `sample-target-repo` 實際執行 CLI 指令，觀察真實多行輸出與邊界案例後再設計解析器。
    - **確保人類肉眼可觀測的時間尺度 (Human-Observable Pacing)**：凡涉及「執行中狀態 (running state)」、「即時進度更新 (on-the-fly updates)」或動畫回饋的功能，若 `sample-target-repo` 測試在 `< 1ms` 內瞬間跑完，人類在瀏覽器一個 frame (`16ms`) 內根本看不到變化。必須先在 `sample-target-repo` 補齊多檔案、多層目錄、多 Class 以及合理的每項測試延遲（如 `0.1s`–`0.25s`），確保肉眼與自動化測試皆能清楚觀測逐項狀態轉換。
-3. **建立/補齊測試案例與 Use Case**：
+3. **建立/補齊或更新測試案例與 Use Case**：
    - **在目標專案建立真實情境**：先在 `sample-target-repo` 撰寫符合需求的 feature 檔案、step definitions、單元或整合測試（例如新增 `tests/acceptance/features/<usecase>.feature`、設定 `pytest.ini` / `behave.ini` 等）。
-   - **在專案端撰寫測試**：在 `backend/tests/` 或 `frontend/e2e/` 撰寫單元/整合/端到端測試，定義期望的行為、API 規格或 WebSocket 訊息協定。
+   - **在專案端新增或更新測試（特別是 E2E 測試）**：
+     - 在 `backend/tests/` 撰寫或更新單元/整合/驗收測試，定義期望的行為、API 規格或 WebSocket 訊息協定。
+     - **審視並同步更新 `frontend/e2e/app.spec.js`**：每處理一個涉及前端或全端互動的 Issue，必須檢視現有的 E2E 測試是否受新行為或 `sample-target-repo` 資料變動影響，並**修改既有 E2E 測試或新增專屬 E2E 測試案例**以完整對應 Issue 的 Acceptance Criteria。
 4. **驗證測試可重現問題 (Red Phase)**：
-   - 執行剛剛建立的測試，確認該測試能成功跑起並重現錯誤，或是明確指出缺少的功能。
+   - 執行剛剛建立的測試（注意：跑 Playwright E2E 前必須先執行 `npm run build` / `make build-frontend`），確認該測試能成功跑起並重現錯誤，或是明確指出缺少的功能。
 5. **進入實作修復 (Green Phase)**：
    - 只有在測試案例與驗證情境皆已就緒並能精準捕捉預期行為後，才開始編寫業務邏輯與架構程式碼。
 
@@ -76,13 +78,13 @@ description: >-
 - **`backend/src/application/`**：
   - 應用程式 Use Cases（例如 `DiscoverTestsUseCase`）。負責編排領域物件。
 - **`backend/src/infrastructure/`**：
-  - 與作業系統、子進程、Pytest/Behave CLI 執行串流、檔案系統互動（例如 `runner_service.py`）。
+  - 與作業系統、子進程、Pytest/Behave CLI 執行串流、檔案系統互動（例如 `runner_service.py`、`output_splitter.py`）。
 - **`backend/src/api/`**：
   - FastAPI Route Handler 與 WebSocket 連線管理（例如 `/ws/run`、`/api/discover`）。
 
 ### 前端（Frontend - Vue 3 + xterm.js）
 - **`frontend/src/composables/`**：
-  - 集中管理狀態與 WebSocket 事件（例如 `useTestRunner.js`、`useTestTree.js`）。
+  - 集中管理狀態與 WebSocket 事件（例如 `useTestRunner.js`、`useTheme.js`、`useTooltip.js`、`useSidebarResize.js`）。
   - 狀態變更應具備可預測性，避免在多個組件中直接 mutate 全域狀態。
   - **全路徑與選取矩陣檢查 (Entry-Point & Selection Matrix)**：
     - 任何與測試執行或樹狀選取相關的邏輯，必須同時涵蓋：
@@ -126,22 +128,26 @@ description: >-
      ```bash
      make acceptance-test FEATURES="tests/acceptance/features/<target>.feature"
      ```
-5. **前端建置驗證與靜態產物同步 (Frontend Build — 每次前端修改後必跑)**：
+5. **前端建置驗證與靜態產物同步 (Frontend Build — 每次前端修改與 E2E 測試前必跑)**：
    ```bash
    make build-frontend
    ```
-   - **關鍵原因**：本機运行的 PytestDeck 伺服器 (`uvicorn app:app --port 9388`) 直接從 `frontend/dist` 提供靜態檔案，而非 Vite HMR dev server。**只要改動任何 `frontend/src/` 檔案，在請使用者檢視 UI 前，最後一步必定要執行 `make build-frontend`（或 `cd frontend && npm run build`）更新 `frontend/dist`**，否則使用者的瀏覽器只會載入舊版 bundle。
-6. **端到端測試 (E2E Tests)**（若改動涉及使用者互動流程）：
+   - **關鍵原因**：本機運行的 PytestDeck 伺服器 (`uvicorn app:app --port 9388`) 與 Playwright E2E 測試皆直接從 `frontend/dist` 提供靜態檔案，而非 Vite HMR dev server。**只要改動任何 `frontend/src/` 檔案，在執行 Playwright E2E 測試或請使用者檢視 UI 前，必定要先執行 `make build-frontend`（或 `cd frontend && npm run build`）更新 `frontend/dist`**，否則 Playwright 與使用者的瀏覽器只會載入舊版 bundle。
+6. **端到端測試 (E2E Tests)**（凡改動涉及前端或使用者互動流程必跑）：
    ```bash
    make e2e-test
    ```
-   - E2E 測試不可只測單一 Happy Path，必須覆蓋實際使用者在 UI 上的操作組合（例如：未勾選直接執行全部、勾選子節點執行、展開/收合節點、中途點擊 Stop 等）。
+   - **新增或調整 E2E 測試**：針對 Issue 的需求，必須在 `frontend/e2e/app.spec.js` 新增對應的 E2E 測試案例或調整既有案例，確保覆蓋實際使用者操作組合（例如：未勾選直接執行全部 `Run Selected (0)`、勾選子節點執行、展開/收合節點、切換不同 Suite、視窗 `focus` 事件、中途點擊 Stop 等）。
+   - **注意本機伺服器狀態 (`reuseExistingServer: true`)**：`playwright.config.js` 預設重用 `9388` port 上的既有伺服器。若修改了 `backend/src/` 且本機伺服器未開啟 `--reload`，執行 E2E 前必須先重啟伺服器（如 `make stop && make dev`），確保後端載入最新程式碼。
 
 ---
 
 ## 6. 提交與 PR 規範 (Git Commit Standards)
 
-遵守 Conventional Commits 與 50/72 格式規範：
+遵守 `git-commit` 技能規範、Conventional Commits 與嚴格的 **50/72 格式規範**：
+
+- **尊重 Staged 狀態**：只提交已 stage 的檔案；若尚無 staged 檔案，先向使用者確認要打包哪些變更（例如拆分為原子化 commits），切勿未經確認直接執行 `git add .` 或 `git add -A`。
+- **50/72 長度限制**：Subject line 嚴格 `<= 50` 字元；Body 每行嚴格 `<= 72` 字元。
 
 ### Commit Message 結構
 ```text
@@ -172,8 +178,9 @@ Refs #<issue_number>
 - [ ] 測試先行：已在動手寫程式碼前，先在目標專案 (`sample-target-repo`) 或測試套件建立對應的 test case / use case，且測試時間尺度足以讓人類肉眼在 UI 上清楚觀測
 - [ ] 若涉及串流輸出解析，已實際執行並檢視 `sample-target-repo` 各套件 (`unit` / `integration` / `acceptance`) 的真實 CLI 輸出格式
 - [ ] 若涉及前端狀態，已檢查全選/未選 (`Run Selected (0)`)、局部勾選、跨套件切換、以及 `window` `focus` 等非同步請求是否會覆蓋即時狀態
+- [ ] 已在 `frontend/e2e/app.spec.js` 新增或調整對應的 E2E 測試案例，且全數通過
 - [ ] 未更動無關檔案（維持乾淨 diff）
 - [ ] 通過 `make lint`，無任何 warning 或 error
 - [ ] 相關單元、整合、驗收與 E2E 測試皆通過
 - [ ] **若動到前端，最後一步已執行 `make build-frontend` 更新 `frontend/dist`，確保本機伺服器提供最新畫面**
-- [ ] Commit 訊息符合規範並附上 Issue 編號
+- [ ] Commit 訊息符合 50/72 規範並附上 Issue 編號
