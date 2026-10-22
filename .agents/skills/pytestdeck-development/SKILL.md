@@ -52,12 +52,15 @@ description: >-
 1. **檢驗現有 Use Case 與目標專案資源**：
    - 檢查 `sample-target-repo` 與 PytestDeck 測試套件中是否已經存在能夠重現問題、或足以驗證新功能的 Use Case。
    - **重要**：若 `sample-target-repo` 根本沒有該功能的使用場景（例如缺乏特定測試結構、logger 配置、非同步測試、或 step 定義），**絕對不可直接通靈實作程式碼**。
-2. **建立/補齊測試案例與 Use Case**：
+2. **實際觀測 CLI 原始輸出與時間尺度 (Raw Output & Pacing Inspection)**：
+   - **禁止假設 CLI 輸出格式**：凡涉及解析 `stdout` / WebSocket 串流（如 `pytest -v -s`、`log_cli = true`、fixture teardown、自訂 print banner 或 `behave` 步驟），必須先在 `sample-target-repo` 實際執行 CLI 指令，觀察真實多行輸出與邊界案例後再設計解析器。
+   - **確保人類肉眼可觀測的時間尺度 (Human-Observable Pacing)**：凡涉及「執行中狀態 (running state)」、「即時進度更新 (on-the-fly updates)」或動畫回饋的功能，若 `sample-target-repo` 測試在 `< 1ms` 內瞬間跑完，人類在瀏覽器一個 frame (`16ms`) 內根本看不到變化。必須先在 `sample-target-repo` 補齊多檔案、多層目錄、多 Class 以及合理的每項測試延遲（如 `0.1s`–`0.25s`），確保肉眼與自動化測試皆能清楚觀測逐項狀態轉換。
+3. **建立/補齊測試案例與 Use Case**：
    - **在目標專案建立真實情境**：先在 `sample-target-repo` 撰寫符合需求的 feature 檔案、step definitions、單元或整合測試（例如新增 `tests/acceptance/features/<usecase>.feature`、設定 `pytest.ini` / `behave.ini` 等）。
    - **在專案端撰寫測試**：在 `backend/tests/` 或 `frontend/e2e/` 撰寫單元/整合/端到端測試，定義期望的行為、API 規格或 WebSocket 訊息協定。
-3. **驗證測試可重現問題 (Red Phase)**：
+4. **驗證測試可重現問題 (Red Phase)**：
    - 執行剛剛建立的測試，確認該測試能成功跑起並重現錯誤，或是明確指出缺少的功能。
-4. **進入實作修復 (Green Phase)**：
+5. **進入實作修復 (Green Phase)**：
    - 只有在測試案例與驗證情境皆已就緒並能精準捕捉預期行為後，才開始編寫業務邏輯與架構程式碼。
 
 ---
@@ -81,6 +84,13 @@ description: >-
 - **`frontend/src/composables/`**：
   - 集中管理狀態與 WebSocket 事件（例如 `useTestRunner.js`、`useTestTree.js`）。
   - 狀態變更應具備可預測性，避免在多個組件中直接 mutate 全域狀態。
+  - **全路徑與選取矩陣檢查 (Entry-Point & Selection Matrix)**：
+    - 任何與測試執行或樹狀選取相關的邏輯，必須同時涵蓋：
+      1. `0` 個節點選取（點擊 `Run Selected (0)` 代表執行當前 Active Suite 全部測試）
+      2. 選取單一/多個目錄 (`directory`)、檔案 (`file`)、類別 (`class`)、或單一函式 (`function` / `scenario`)
+      3. 不同測試套件切換（`unit`、`integration`、`acceptance`）與檔案預設收合 (`isOpen = false`) vs. 展開狀態。
+  - **背景事件與生命週期防呆 (Lifecycle & Race-Condition Guards)**：
+    - 瀏覽器視窗切換會觸發 `window` 的 `focus` 事件（例如 `loadStoredMethodOutputs` 重新拉取舊結果）、或 Vue `watch` 觸發 API 請求。凡是在 `isRunning.value === true` 期間可能覆寫即時狀態的背景 fetch，**必須加上 `if (isRunning.value) return` 防護**，避免使用者切換視窗時把執行中狀態洗掉。
 - **`frontend/src/components/`**：
   - UI 展示層。樣式必須沿用專案定義之 CSS 變數（如 `--accent-blue`、`--bg-primary` 等），切勿使用任意 ad-hoc hardcoded 顏色。
 - **終端機輸出處理**：
@@ -90,7 +100,7 @@ description: >-
 
 ## 5. 驗證與測試金字塔 (Testing & Verification Pipeline)
 
-在任何程式碼提交前，必須通過對應層級的自動化驗收：
+在任何程式碼提交或回報「完成」前，必須通過對應層級的自動化驗收：
 
 1. **程式碼檢查與排版 (Linting)**：
    ```bash
@@ -116,15 +126,16 @@ description: >-
      ```bash
      make acceptance-test FEATURES="tests/acceptance/features/<target>.feature"
      ```
-5. **前端建置驗證 (Frontend Build)**：
+5. **前端建置驗證與靜態產物同步 (Frontend Build — 每次前端修改後必跑)**：
    ```bash
    make build-frontend
    ```
-   - 確保 Vite 打包無報錯，靜態檔案正確輸出至 `backend/src/frontend_dist`。
+   - **關鍵原因**：本機运行的 PytestDeck 伺服器 (`uvicorn app:app --port 9388`) 直接從 `frontend/dist` 提供靜態檔案，而非 Vite HMR dev server。**只要改動任何 `frontend/src/` 檔案，在請使用者檢視 UI 前，最後一步必定要執行 `make build-frontend`（或 `cd frontend && npm run build`）更新 `frontend/dist`**，否則使用者的瀏覽器只會載入舊版 bundle。
 6. **端到端測試 (E2E Tests)**（若改動涉及使用者互動流程）：
    ```bash
    make e2e-test
    ```
+   - E2E 測試不可只測單一 Happy Path，必須覆蓋實際使用者在 UI 上的操作組合（例如：未勾選直接執行全部、勾選子節點執行、展開/收合節點、中途點擊 Stop 等）。
 
 ---
 
@@ -158,9 +169,11 @@ Refs #<issue_number>
 
 在將任務回報為完成前，確認以下項目：
 - [ ] 已詳讀 Issue 並解決所有 acceptance criteria
-- [ ] 測試先行：已在動手寫程式碼前，先在目標專案 (sample-target-repo) 或測試套件建立對應的 test case / use case
+- [ ] 測試先行：已在動手寫程式碼前，先在目標專案 (`sample-target-repo`) 或測試套件建立對應的 test case / use case，且測試時間尺度足以讓人類肉眼在 UI 上清楚觀測
+- [ ] 若涉及串流輸出解析，已實際執行並檢視 `sample-target-repo` 各套件 (`unit` / `integration` / `acceptance`) 的真實 CLI 輸出格式
+- [ ] 若涉及前端狀態，已檢查全選/未選 (`Run Selected (0)`)、局部勾選、跨套件切換、以及 `window` `focus` 等非同步請求是否會覆蓋即時狀態
 - [ ] 未更動無關檔案（維持乾淨 diff）
 - [ ] 通過 `make lint`，無任何 warning 或 error
-- [ ] 相關單元與驗收測試皆通過
-- [ ] 若動到前端，已驗證 `make build-frontend`
+- [ ] 相關單元、整合、驗收與 E2E 測試皆通過
+- [ ] **若動到前端，最後一步已執行 `make build-frontend` 更新 `frontend/dist`，確保本機伺服器提供最新畫面**
 - [ ] Commit 訊息符合規範並附上 Issue 編號
