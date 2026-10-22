@@ -468,7 +468,88 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     expect(terminalText).toContain('Starting calculation step 1')
     expect(terminalText).toContain('Processing batch 1')
   })
+
+  test('should show running color on selected DirectoryTree nodes and parents while executing and restore on stop', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const rootDirRow = page.locator('.node-row:has(.type-badge.directory)').first()
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+
+    await expect(calcFileRow).toBeVisible()
+    await expect(slowFileRow).toBeVisible()
+
+    // 1. Run all unit tests first so both files have previous outcome colors
+    await page.locator('.btn-primary').click()
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Both collapsed files now have previous run result colors
+    await expect(calcFileRow).toHaveClass(/row-has-passed/)
+    await expect(slowFileRow).toHaveClass(/row-has-/)
+
+    // 2. Select ONLY test_slow_and_classes.py and run it
+    await slowFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    // While executing:
+    // - Selected collapsed file row shows row-has-running (not previous row-has-passed/failed)
+    // - Expanded parent directory row shows row-has-running
+    // - Unselected file (test_calculator.py) keeps row-has-passed and is not running
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(slowFileRow.locator('.node-checkbox')).toBeDisabled()
+    await expect(calcFileRow.locator('.node-checkbox')).toBeDisabled()
+    await expect(page.locator('#btn-clear-selection')).toBeDisabled()
+    await expect(slowFileRow).toHaveClass(/row-has-running/)
+    await expect(slowFileRow).not.toHaveClass(/row-has-passed|row-has-failed/)
+    await expect(rootDirRow).toHaveClass(/row-has-running/)
+    await expect(calcFileRow).toHaveClass(/row-has-passed/)
+    await expect(calcFileRow).not.toHaveClass(/row-has-running/)
+
+    // Expand slowFileRow while running to verify expanded file, class, and function nodes show running color,
+    // and that earlier tests transition to passed on the fly while slow tests are still running
+    await slowFileRow.locator('.toggle-icon').click()
+    await expect(slowFileRow).toHaveClass(/row-has-running/)
+    const classRow = page.locator('.node-row:has-text("TestClassWithSlowSetup")')
+    const fastFuncRow = page.locator('.node-row:has-text("test_query_fast_one")')
+    const slowFuncRow = page.locator('.node-row:has-text("test_long_running_pipeline")')
+    await expect(slowFuncRow).toHaveClass(/row-outcome-running/)
+
+    // While test_long_running_pipeline is still running, earlier test_query_fast_one updates to passed on the fly
+    await expect(fastFuncRow).toHaveClass(/row-outcome-passed/, { timeout: 5000 })
+    await expect(slowFuncRow).toHaveClass(/row-outcome-running/)
+    await expect(slowFileRow).toHaveClass(/row-has-running/)
+
+    // Wait for completion and verify running colors are replaced by finished outcomes
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+    await expect(slowFileRow.locator('.node-checkbox')).toBeEnabled()
+    await expect(calcFileRow.locator('.node-checkbox')).toBeEnabled()
+    await expect(page.locator('#btn-clear-selection')).toBeEnabled()
+    await expect(rootDirRow).not.toHaveClass(/row-has-running/)
+    await expect(slowFileRow).not.toHaveClass(/row-has-running/)
+    await expect(classRow).not.toHaveClass(/row-has-running/)
+    await expect(slowFuncRow).toHaveClass(/row-outcome-passed/)
+
+    // Collapse slowFileRow back and verify it has its rollup outcome color
+    await slowFileRow.locator('.toggle-icon').click()
+    await expect(slowFileRow).toHaveClass(/row-has-/)
+
+    // 3. Start running again and click Stop mid-run; verify running state restores previous outcome
+    await page.locator('.btn-primary').click()
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(slowFileRow.locator('.node-checkbox')).toBeDisabled()
+    await expect(slowFileRow).toHaveClass(/row-has-running/)
+    await stopBtn.click()
+
+    await expect(page.locator('.btn-primary')).toBeVisible({ timeout: 10000 })
+    await expect(slowFileRow.locator('.node-checkbox')).toBeEnabled()
+    await expect(slowFileRow).not.toHaveClass(/row-has-running/)
+    await expect(rootDirRow).not.toHaveClass(/row-has-running/)
+    await expect(slowFileRow).toHaveClass(/row-has-/)
+  })
 })
+
 
 
 

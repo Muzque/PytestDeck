@@ -70,7 +70,7 @@ const activeOptionCount = computed(() =>
           id="btn-clear-selection"
           class="btn-icon-action btn-clear-selection"
           :class="{ 'has-selections': selectedCount > 0 }"
-          :disabled="selectedCount === 0"
+          :disabled="selectedCount === 0 || isRunning"
           :title="selectedCount > 0 ? `Clear ${selectedCount} selected test${selectedCount > 1 ? 's' : ''}` : 'Clear selections (none selected)'"
           @click="emit('clear-selection')"
         >
@@ -134,6 +134,7 @@ const activeOptionCount = computed(() =>
         :node="testTree" 
         :selectedNodes="selectedNodes"
         :methodOutputs="methodOutputs"
+        :isRunning="isRunning"
         @toggle-select="emit('toggle-select', $event)"
       />
     </div>

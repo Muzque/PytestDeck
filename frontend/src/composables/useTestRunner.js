@@ -63,7 +63,13 @@ export function useTestRunner() {
       if (res.ok) {
         const data = await res.json()
         selectedTestDetail.value = data
-        if (data && !data.latest_run && nodeId && methodOutputs.value[nodeId]) {
+        if (
+          data &&
+          !data.latest_run &&
+          nodeId &&
+          methodOutputs.value[nodeId] &&
+          methodOutputs.value[nodeId].outcome !== 'running'
+        ) {
           const updated = { ...methodOutputs.value }
           delete updated[nodeId]
           methodOutputs.value = updated
@@ -97,11 +103,13 @@ export function useTestRunner() {
   }
 
   const loadStoredMethodOutputs = async () => {
+    if (isRunning.value) return
     try {
       const url = targetPath.value ? `/api/test-runs?target_path=${encodeURIComponent(targetPath.value)}` : '/api/test-runs'
       const res = await fetch(url)
-      if (res.ok) {
+      if (res.ok && !isRunning.value) {
         const data = await res.json()
+        if (isRunning.value) return
         methodOutputs.value = data.runs || {}
         try {
           localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
@@ -285,6 +293,189 @@ export function useTestRunner() {
   const selectedHistoryId = ref(null)
 
   let ws = null
+  let preRunMethodOutputs = null
+  let currentLiveNodeId = null
+  let currentLiveNodeStartTime = null
+  let lastLiveStepTime = null
+  let currentLiveFeatureFile = null
+  let currentLiveScenarioOutcome = null
+
+  const collectRunningLeafIds = (node, selectedSet, runAll, ancestorSelected = false, result = new Set()) => {
+    if (!node) return result
+    const isSelected = runAll || ancestorSelected || selectedSet.has(node.id)
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        collectRunningLeafIds(child, selectedSet, runAll, isSelected, result)
+      }
+    } else if (isSelected && node.id) {
+      result.add(node.id)
+    }
+    return result
+  }
+
+  const applyLiveOutcome = (nodeId, outcome, duration = null) => {
+    if (!nodeId || !outcome) return
+    const updated = { ...methodOutputs.value }
+    let matched = false
+    for (const key of Object.keys(updated)) {
+      if (key === nodeId || nodeId.endsWith(key) || key.endsWith(nodeId)) {
+        updated[key] = {
+          ...updated[key],
+          outcome,
+          duration: duration !== null ? duration : updated[key]?.duration ?? null
+        }
+        matched = true
+      }
+    }
+    if (!matched) {
+      updated[nodeId] = {
+        node_id: nodeId,
+        outcome,
+        duration
+      }
+    }
+    methodOutputs.value = updated
+  }
+
+  const mapPytestToken = (token) => {
+    if (token === 'PASSED' || token === 'XPASS') return 'passed'
+    if (token === 'FAILED' || token === 'ERROR') return 'failed'
+    if (token === 'SKIPPED' || token === 'XFAIL') return 'skipped'
+    return null
+  }
+
+  const parsePytestStatus = (text) => {
+    const m = text.match(/(?:^|\s)(PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)(?:\s+\[\s*\d+%\]|\b)/)
+    if (!m) return null
+    return mapPytestToken(m[1])
+  }
+
+  const processLiveStdoutChunk = (rawChunk) => {
+    if (!rawChunk) return
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const lines = rawChunk.split(/\r?\n/)
+    for (const rawLine of lines) {
+      if (!rawLine) continue
+      // eslint-disable-next-line no-control-regex
+      const clean = rawLine.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+      const stripped = clean.trim()
+      if (!stripped) continue
+
+      // Check for Behave feature header
+      const featMatch = stripped.match(/^Feature:\s*(.*?)(?:\s+#\s*([^\s:]+\.feature)(?::\d+)?)?$/)
+      if (featMatch && featMatch[2]) {
+        if (currentLiveNodeId && currentLiveScenarioOutcome) {
+          const dur = currentLiveNodeStartTime ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
+          applyLiveOutcome(currentLiveNodeId, currentLiveScenarioOutcome, dur)
+          currentLiveNodeId = null
+          currentLiveScenarioOutcome = null
+        }
+        currentLiveFeatureFile = featMatch[2]
+        continue
+      }
+
+      // Check for Behave scenario header
+      const scMatch = stripped.match(/^(?:Scenario|Scenario Outline):\s*(.*?)(?:\s+#\s*([^\s:]+\.feature)(?::\d+)?)?$/)
+      if (scMatch) {
+        if (currentLiveNodeId && currentLiveScenarioOutcome) {
+          const dur = currentLiveNodeStartTime ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
+          applyLiveOutcome(currentLiveNodeId, currentLiveScenarioOutcome, dur)
+        }
+        const title = scMatch[1].trim()
+        const featFile = scMatch[2] || currentLiveFeatureFile || ''
+        currentLiveNodeId = featFile ? `${featFile}::${title}` : title
+        currentLiveNodeStartTime = now
+        currentLiveScenarioOutcome = 'passed'
+        continue
+      }
+
+      // Check for Behave failure or summary line while in a scenario
+      if (currentLiveScenarioOutcome && currentLiveNodeId) {
+        if (/^(AssertionError|Traceback|FAILED)/i.test(stripped) || rawLine.includes('\x1b[31m')) {
+          currentLiveScenarioOutcome = 'failed'
+        }
+        if (/^\d+\s+features?\s+passed/.test(stripped)) {
+          const dur = currentLiveNodeStartTime ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
+          applyLiveOutcome(currentLiveNodeId, currentLiveScenarioOutcome, dur)
+          currentLiveNodeId = null
+          currentLiveScenarioOutcome = null
+          continue
+        }
+      }
+
+      // Check for Pytest test node line (e.g. "path/to/test.py::test_func ...")
+      const isSectionBanner = /^={3,}\s+.+\s+={3,}$/.test(stripped)
+      if (
+        !isSectionBanner &&
+        !stripped.startsWith('rootdir:') &&
+        !stripped.startsWith('cachedir:') &&
+        !stripped.startsWith('plugins:') &&
+        !stripped.startsWith('FAILURES')
+      ) {
+        const pyMatch = stripped.match(/^([^\s]+\.py::[^\s]+)(?:\s+(.*))?$/)
+        if (pyMatch) {
+          const nid = pyMatch[1]
+          const rest = pyMatch[2] || ''
+          const immediateOutcome = parsePytestStatus(rest)
+          if (immediateOutcome) {
+            const dur = lastLiveStepTime ? Math.max(0, (now - lastLiveStepTime) / 1000) : 0.0005
+            applyLiveOutcome(nid, immediateOutcome, dur)
+            lastLiveStepTime = now
+            currentLiveNodeId = null
+            currentLiveNodeStartTime = null
+          } else {
+            currentLiveNodeId = nid
+            currentLiveNodeStartTime = now
+          }
+          continue
+        }
+      }
+
+      // Check for standalone Pytest status line after "-s" or live log output
+      // (including cases where teardown output is appended immediately after PASSED, e.g. "PASSED[fixture] ...")
+      if (currentLiveNodeId && !currentLiveScenarioOutcome) {
+        if (isSectionBanner || stripped.startsWith('short test summary') || stripped === 'FAILURES') {
+          currentLiveNodeId = null
+          currentLiveNodeStartTime = null
+          continue
+        }
+        const standaloneMatch = stripped.match(/^(PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)(?:\s+\[\s*\d+%\]|\b|\[)/)
+        if (standaloneMatch) {
+          const out = mapPytestToken(standaloneMatch[1])
+          if (out) {
+            const dur = currentLiveNodeStartTime ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
+            applyLiveOutcome(currentLiveNodeId, out, dur)
+            lastLiveStepTime = now
+            currentLiveNodeId = null
+            currentLiveNodeStartTime = null
+          }
+        }
+      }
+    }
+  }
+
+  const restoreRunningOutputs = () => {
+    if (preRunMethodOutputs !== null) {
+      const pre = preRunMethodOutputs
+      preRunMethodOutputs = null
+      const current = { ...methodOutputs.value }
+      for (const [key, val] of Object.entries(current)) {
+        if (val && val.outcome === 'running') {
+          if (pre[key] !== undefined) {
+            current[key] = pre[key]
+          } else {
+            delete current[key]
+          }
+        }
+      }
+      methodOutputs.value = current
+    }
+    currentLiveNodeId = null
+    currentLiveNodeStartTime = null
+    lastLiveStepTime = null
+    currentLiveFeatureFile = null
+    currentLiveScenarioOutcome = null
+  }
 
   const availableSuites = ref([
     { label: 'Unit Tests', path: 'backend/tests/unit' },
@@ -355,6 +546,7 @@ export function useTestRunner() {
   }
 
   const toggleSelectNode = (node) => {
+    if (isRunning.value) return
     const newSet = new Set(selectedNodes.value)
     const isCurrentlySelected = newSet.has(node.id)
     const allIds = collectAllChildIds(node)
@@ -368,12 +560,18 @@ export function useTestRunner() {
   }
 
   const clearSelections = () => {
+    if (isRunning.value) return
     selectedNodes.value = new Set()
   }
 
   const getExecutionNodes = () => {
     const selected = Array.from(selectedNodes.value)
-    if (selected.length === 0) return []
+    if (selected.length === 0) {
+      if (testTree.value?.id && testTree.value.id !== 'root') {
+        return [testTree.value.id]
+      }
+      return activeSuite.value ? [activeSuite.value] : []
+    }
 
     return selected.filter(nodeId => {
       return !selected.some(otherId => {
@@ -391,6 +589,42 @@ export function useTestRunner() {
     summary.value = null
     selectedHistoryId.value = null
     activeTab.value = 'live'
+    currentLiveNodeId = null
+    currentLiveNodeStartTime = null
+    lastLiveStepTime = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    currentLiveFeatureFile = null
+    currentLiveScenarioOutcome = null
+
+    preRunMethodOutputs = { ...methodOutputs.value }
+    const runAll = selectedNodes.value.size === 0
+    const runningLeafIds = collectRunningLeafIds(testTree.value, selectedNodes.value, runAll)
+    if (runningLeafIds.size === 0 && !runAll) {
+      selectedNodes.value.forEach(id => runningLeafIds.add(id))
+    }
+    if (runningLeafIds.size > 0) {
+      const nextOutputs = { ...preRunMethodOutputs }
+      for (const leafId of runningLeafIds) {
+        let matchedExisting = false
+        for (const key of Object.keys(nextOutputs)) {
+          if (key === leafId || leafId.endsWith(key) || key.endsWith(leafId)) {
+            nextOutputs[key] = {
+              ...nextOutputs[key],
+              outcome: 'running',
+              duration: null
+            }
+            matchedExisting = true
+          }
+        }
+        if (!matchedExisting) {
+          nextOutputs[leafId] = {
+            node_id: leafId,
+            outcome: 'running',
+            duration: null
+          }
+        }
+      }
+      methodOutputs.value = nextOutputs
+    }
 
     let retries = 0
     const maxRetries = 3
@@ -417,6 +651,9 @@ export function useTestRunner() {
           const msg = JSON.parse(event.data)
           if (msg.type === 'stdout' || msg.type === 'status') {
             appendLog(msg.data)
+            if (msg.type === 'stdout') {
+              processLiveStdoutChunk(msg.data)
+            }
             if (singleSelectedNode.value && selectedNodes.value.size === 1) {
               const nid = singleSelectedNode.value.id
               if (!liveMethodRun.value) {
@@ -435,18 +672,30 @@ export function useTestRunner() {
             isRunning.value = false
             exitCode.value = msg.exit_code
             summary.value = msg.summary
+            currentLiveNodeId = null
+            currentLiveFeatureFile = null
+            currentLiveScenarioOutcome = null
+
+            const baseOutputs = preRunMethodOutputs !== null ? { ...preRunMethodOutputs } : { ...methodOutputs.value }
+            preRunMethodOutputs = null
 
             if (msg.method_outputs) {
-              methodOutputs.value = {
-                ...methodOutputs.value,
-                ...msg.method_outputs
+              for (const [newKey, newVal] of Object.entries(msg.method_outputs)) {
+                for (const existingKey of Object.keys(baseOutputs)) {
+                  if (existingKey !== newKey && (existingKey.endsWith(newKey) || newKey.endsWith(existingKey))) {
+                    delete baseOutputs[existingKey]
+                  }
+                }
+                baseOutputs[newKey] = newVal
               }
+              methodOutputs.value = baseOutputs
               try {
                 localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
               } catch {
                 // Ignore storage limits
               }
-
+            } else {
+              methodOutputs.value = baseOutputs
             }
             liveMethodRun.value = null
 
@@ -464,6 +713,7 @@ export function useTestRunner() {
             appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
             isRunning.value = false
             liveMethodRun.value = null
+            restoreRunningOutputs()
           }
         } catch {
           appendLog(event.data)
@@ -481,12 +731,16 @@ export function useTestRunner() {
         } else {
           appendLog('\x1b[1;31mWebSocket Connection Error: Max retries reached.\x1b[0m\r\n')
           isRunning.value = false
+          liveMethodRun.value = null
+          restoreRunningOutputs()
         }
       }
 
       ws.onclose = () => {
         if (retries === 0 || retries >= maxRetries) {
           isRunning.value = false
+          liveMethodRun.value = null
+          restoreRunningOutputs()
         }
       }
     }
@@ -495,9 +749,16 @@ export function useTestRunner() {
   }
 
   const stopTests = () => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ action: 'STOP' }))
+    if (ws) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ action: 'STOP' }))
+      }
+      ws.close()
+      ws = null
     }
+    isRunning.value = false
+    liveMethodRun.value = null
+    restoreRunningOutputs()
   }
 
   const selectHistoryItem = (item) => {
