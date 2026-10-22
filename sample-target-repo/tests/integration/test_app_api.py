@@ -14,6 +14,7 @@ client = TestClient(app)
 
 def test_health_check_endpoint():
     logger.info("GET /health - Checking service status")
+    time.sleep(0.15)
     response = client.get("/health")
     logger.info("Status Code: %s, Body: %s", response.status_code, response.json())
     assert response.status_code == 200
@@ -22,6 +23,7 @@ def test_health_check_endpoint():
 
 def test_add_endpoint():
     logger.info("GET /calculate/add?a=15&b=25 - Testing addition endpoint")
+    time.sleep(0.15)
     response = client.get("/calculate/add?a=15&b=25")
     logger.info("Status Code: %s, Body: %s", response.status_code, response.json())
     assert response.status_code == 200
@@ -30,6 +32,7 @@ def test_add_endpoint():
 
 def test_divide_endpoint_valid():
     logger.info("GET /calculate/divide?a=20&b=4 - Testing division endpoint")
+    time.sleep(0.15)
     response = client.get("/calculate/divide?a=20&b=4")
     logger.info("Status Code: %s, Body: %s", response.status_code, response.json())
     assert response.status_code == 200
@@ -38,6 +41,7 @@ def test_divide_endpoint_valid():
 
 def test_divide_endpoint_by_zero():
     logger.info("GET /calculate/divide?a=10&b=0 - Testing division by zero handling")
+    time.sleep(0.15)
     response = client.get("/calculate/divide?a=10&b=0")
     logger.warning("Status Code: %s, Body: %s", response.status_code, response.json())
     assert response.status_code == 400
@@ -62,7 +66,7 @@ def test_long_running_batch_calculation():
     for stage_num, desc, path, expected in stages:
         logger.info("[%s] %s...", stage_num, desc)
         logger.info("Sending request: GET %s", path)
-        time.sleep(1.0)
+        time.sleep(0.35)
         response = client.get(path)
         logger.info("Received status %s: %s", response.status_code, response.json())
         assert response.status_code == 200
@@ -79,12 +83,14 @@ class TestCalculatorApiService:
 
     def test_health_check_status_code(self):
         logger.info("[class-test] TestCalculatorApiService.test_health_check_status_code")
+        time.sleep(0.12)
         response = client.get("/health")
         logger.info("Status Code: %s", response.status_code)
         assert response.status_code == 200
 
     def test_health_check_payload_structure(self):
         logger.info("[class-test] TestCalculatorApiService.test_health_check_payload_structure")
+        time.sleep(0.12)
         response = client.get("/health")
         data = response.json()
         logger.info("Response Body: %s", data)
@@ -93,6 +99,7 @@ class TestCalculatorApiService:
 
     def test_add_positive_integers(self):
         logger.info("[class-test] TestCalculatorApiService.test_add_positive_integers: 10 + 25")
+        time.sleep(0.12)
         response = client.get("/calculate/add?a=10&b=25")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -100,6 +107,7 @@ class TestCalculatorApiService:
 
     def test_add_negative_integers(self):
         logger.info("[class-test] TestCalculatorApiService.test_add_negative_integers: -10 + -20")
+        time.sleep(0.12)
         response = client.get("/calculate/add?a=-10&b=-20")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -107,6 +115,7 @@ class TestCalculatorApiService:
 
     def test_add_mixed_sign_numbers(self):
         logger.info("[class-test] TestCalculatorApiService.test_add_mixed_sign_numbers: 100 + -40")
+        time.sleep(0.12)
         response = client.get("/calculate/add?a=100&b=-40")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -114,6 +123,7 @@ class TestCalculatorApiService:
 
     def test_add_zero_identity(self):
         logger.info("[class-test] TestCalculatorApiService.test_add_zero_identity: 55 + 0")
+        time.sleep(0.12)
         response = client.get("/calculate/add?a=55&b=0")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -121,6 +131,7 @@ class TestCalculatorApiService:
 
     def test_add_floating_point_numbers(self):
         logger.info("[class-test] TestCalculatorApiService.test_add_floating_point_numbers: 12.3 + 7.7")
+        time.sleep(0.12)
         response = client.get("/calculate/add?a=12.3&b=7.7")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -128,6 +139,7 @@ class TestCalculatorApiService:
 
     def test_add_large_numbers(self):
         logger.info("[class-test] TestCalculatorApiService.test_add_large_numbers: 1000000 + 2000000")
+        time.sleep(0.12)
         response = client.get("/calculate/add?a=1000000&b=2000000")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -135,6 +147,7 @@ class TestCalculatorApiService:
 
     def test_divide_exact_integers(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_exact_integers: 80 / 4")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=80&b=4")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -142,6 +155,7 @@ class TestCalculatorApiService:
 
     def test_divide_fractional_result(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_fractional_result: 9 / 2")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=9&b=2")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -149,6 +163,7 @@ class TestCalculatorApiService:
 
     def test_divide_negative_numerator(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_negative_numerator: -45 / 9")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=-45&b=9")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -156,6 +171,7 @@ class TestCalculatorApiService:
 
     def test_divide_negative_denominator(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_negative_denominator: 45 / -9")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=45&b=-9")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -163,6 +179,7 @@ class TestCalculatorApiService:
 
     def test_divide_both_negative(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_both_negative: -45 / -9")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=-45&b=-9")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -170,6 +187,7 @@ class TestCalculatorApiService:
 
     def test_divide_zero_numerator(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_zero_numerator: 0 / 15")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=0&b=15")
         logger.info("Result: %s", response.json())
         assert response.status_code == 200
@@ -177,12 +195,14 @@ class TestCalculatorApiService:
 
     def test_divide_by_zero_status_code(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_by_zero_status_code: 25 / 0")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=25&b=0")
         logger.warning("Status Code: %s, Body: %s", response.status_code, response.json())
         assert response.status_code == 400
 
     def test_divide_by_zero_error_message(self):
         logger.info("[class-test] TestCalculatorApiService.test_divide_by_zero_error_message: checking detail")
+        time.sleep(0.12)
         response = client.get("/calculate/divide?a=25&b=0")
         logger.info("Error Detail: %s", response.json().get("detail"))
         assert response.json() == {"detail": "Cannot divide by zero"}
