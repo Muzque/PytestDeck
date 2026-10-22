@@ -58,8 +58,10 @@ def test_behave_scenario_output_segmentation():
         "  Scenario: Invalid login # features/login.feature:8\n"
         "    Given invalid user\n"
         "    Then 401 Unauthorized\n"
+        "      Assertion Failed: expected 401 got 500\n"
         "\n"
-        "1 feature passed, 2 scenarios passed\n"
+        "0 features passed, 1 failed, 0 skipped\n"
+        "1 scenario passed, 1 failed, 0 skipped\n"
     )
 
     collector = MethodOutputCollector()
@@ -69,7 +71,9 @@ def test_behave_scenario_output_segmentation():
     results = collector.get_results()
     assert "features/login.feature::Successful login" in results
     assert "LOG: user verified" in results["features/login.feature::Successful login"]["output"]
+    assert results["features/login.feature::Successful login"]["outcome"] == "passed"
     assert "features/login.feature::Invalid login" in results
+    assert results["features/login.feature::Invalid login"]["outcome"] == "failed"
 
 
 def test_class_targeting_not_single_leaf():

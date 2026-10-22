@@ -5,7 +5,8 @@ import { useTooltip } from '../composables/useTooltip'
 const props = defineProps({
   node: { type: Object, required: true },
   selectedNodes: { type: Set, required: true },
-  methodOutputs: { type: Object, default: () => ({}) }
+  methodOutputs: { type: Object, default: () => ({}) },
+  isRunning: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['toggle-select'])
@@ -123,6 +124,7 @@ const toggleOpen = () => {
 }
 
 const onRowClick = () => {
+  if (props.isRunning) return
   emit('toggle-select', props.node)
 }
 
@@ -132,6 +134,7 @@ const onToggleClick = (e) => {
 }
 
 const onChildToggleSelect = (targetNode) => {
+  if (props.isRunning) return
   emit('toggle-select', targetNode)
 }
 </script>
@@ -141,11 +144,12 @@ const onChildToggleSelect = (targetNode) => {
     <div 
       class="node-row" 
       :class="[
-        { 'is-selected': isChecked },
+        { 'is-selected': isChecked, 'is-running-locked': isRunning },
         nodeOutcome ? 'row-outcome-' + nodeOutcome : '',
-        !isOpen && rollupCounts.failed > 0 ? 'row-has-failed' : '',
-        !isOpen && rollupCounts.failed === 0 && rollupCounts.passed > 0 ? 'row-has-passed' : '',
-        !isOpen && rollupCounts.failed === 0 && rollupCounts.passed === 0 && rollupCounts.skipped > 0 ? 'row-has-skipped' : ''
+        rollupCounts.running > 0 ? 'row-has-running' : '',
+        rollupCounts.running === 0 && !isOpen && rollupCounts.failed > 0 ? 'row-has-failed' : '',
+        rollupCounts.running === 0 && !isOpen && rollupCounts.failed === 0 && rollupCounts.passed > 0 ? 'row-has-passed' : '',
+        rollupCounts.running === 0 && !isOpen && rollupCounts.failed === 0 && rollupCounts.passed === 0 && rollupCounts.skipped > 0 ? 'row-has-skipped' : ''
       ]" 
       @click="onRowClick"
       @mouseenter="showTooltip(node, $event)"
@@ -163,6 +167,7 @@ const onChildToggleSelect = (targetNode) => {
       <input 
         type="checkbox" 
         :checked="isChecked" 
+        :disabled="isRunning"
         @click.stop
         @change="onRowClick"
         class="node-checkbox"
@@ -179,31 +184,51 @@ const onChildToggleSelect = (targetNode) => {
         {{ node.name }}
       </span>
 
-      <!-- Right-aligned duration chip for test functions -->
+      <!-- Right-aligned duration or running chip for test functions -->
       <span 
-        v-if="formattedDuration" 
+        v-if="nodeOutcome === 'running'" 
+        class="node-duration outcome-running" 
+        title="Test is currently executing"
+      >
+        ⏳ Running
+      </span>
+      <span 
+        v-else-if="formattedDuration" 
         class="node-duration" 
         :class="nodeOutcome ? 'outcome-' + nodeOutcome : ''"
         title="Execution duration"
       >
         {{ formattedDuration }}
       </span>
-
-      <!-- Rollup badges when folder/file is collapsed -->
-      <div 
-        v-if="!isOpen && rollupCounts.total > 0" 
-        class="node-rollup"
-        :title="`${rollupCounts.passed} passed, ${rollupCounts.failed} failed, ${rollupCounts.skipped} skipped`"
+      <span 
+        v-else-if="nodeOutcome" 
+        class="node-duration" 
+        :class="'outcome-' + nodeOutcome"
+        :title="outcomeTitle"
       >
-        <span v-if="rollupCounts.failed > 0" class="rollup-chip failed">
-          {{ rollupCounts.failed }} ✗
+        {{ nodeOutcome === 'passed' ? '✓' : (nodeOutcome === 'failed' || nodeOutcome === 'error' ? '✗' : '–') }}
+      </span>
+
+      <!-- Rollup badges when folder/file is collapsed or has running children -->
+      <div 
+        v-if="rollupCounts.running > 0 || (!isOpen && rollupCounts.total > 0)" 
+        class="node-rollup"
+        :title="`${rollupCounts.running ? rollupCounts.running + ' running, ' : ''}${rollupCounts.passed} passed, ${rollupCounts.failed} failed, ${rollupCounts.skipped} skipped`"
+      >
+        <span v-if="rollupCounts.running > 0" class="rollup-chip running">
+          {{ rollupCounts.running }} ⏳
         </span>
-        <span v-if="rollupCounts.passed > 0" class="rollup-chip passed">
-          {{ rollupCounts.passed }} ✓
-        </span>
-        <span v-if="rollupCounts.skipped > 0" class="rollup-chip skipped">
-          {{ rollupCounts.skipped }} –
-        </span>
+        <template v-if="!isOpen || rollupCounts.running > 0">
+          <span v-if="rollupCounts.failed > 0" class="rollup-chip failed">
+            {{ rollupCounts.failed }} ✗
+          </span>
+          <span v-if="rollupCounts.passed > 0" class="rollup-chip passed">
+            {{ rollupCounts.passed }} ✓
+          </span>
+          <span v-if="rollupCounts.skipped > 0" class="rollup-chip skipped">
+            {{ rollupCounts.skipped }} –
+          </span>
+        </template>
       </div>
     </div>
 
@@ -214,6 +239,7 @@ const onChildToggleSelect = (targetNode) => {
         :node="child"
         :selectedNodes="selectedNodes"
         :methodOutputs="methodOutputs"
+        :isRunning="isRunning"
         @toggle-select="onChildToggleSelect"
       />
     </div>
@@ -235,6 +261,9 @@ const onChildToggleSelect = (targetNode) => {
   transition: background 0.15s ease, border-color 0.15s ease;
   min-width: max-content;
   border-left: 3px solid transparent;
+}
+.node-row.is-running-locked {
+  cursor: default;
 }
 
 .node-row:hover {
@@ -264,9 +293,28 @@ const onChildToggleSelect = (targetNode) => {
   background: rgba(251, 191, 36, 0.04);
 }
 
-.node-row.row-outcome-running {
+.node-row.row-outcome-running,
+.node-row.row-has-running {
   border-left-color: var(--accent-blue);
-  background: rgba(56, 189, 248, 0.05);
+  background: rgba(56, 189, 248, 0.14);
+  box-shadow: inset 3px 0 10px -2px rgba(56, 189, 248, 0.45);
+  animation: pulse-running-row 1.4s infinite ease-in-out;
+}
+
+.node-row.is-selected.row-outcome-running,
+.node-row.is-selected.row-has-running {
+  background: rgba(56, 189, 248, 0.22);
+}
+
+@keyframes pulse-running-row {
+  0%, 100% {
+    border-left-color: var(--accent-blue);
+    background: rgba(56, 189, 248, 0.16);
+  }
+  50% {
+    border-left-color: rgba(56, 189, 248, 0.45);
+    background: rgba(56, 189, 248, 0.06);
+  }
 }
 
 .toggle-icon {
@@ -281,6 +329,10 @@ const onChildToggleSelect = (targetNode) => {
 .node-checkbox {
   accent-color: var(--accent-blue);
   cursor: pointer;
+}
+.node-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .type-badge {
   font-size: 0.62rem;
@@ -352,6 +404,13 @@ const onChildToggleSelect = (targetNode) => {
   border-color: rgba(251, 191, 36, 0.25);
 }
 
+.node-duration.outcome-running {
+  color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.45);
+  font-weight: 600;
+}
+
 /* Rollup chips on collapsed folders/files */
 .node-rollup {
   margin-left: auto;
@@ -386,6 +445,12 @@ const onChildToggleSelect = (targetNode) => {
   background: rgba(251, 191, 36, 0.15);
   color: var(--accent-yellow);
   border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.rollup-chip.running {
+  background: rgba(56, 189, 248, 0.20);
+  color: var(--accent-blue);
+  border: 1px solid rgba(56, 189, 248, 0.45);
 }
 
 .node-children {

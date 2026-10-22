@@ -22,13 +22,15 @@ class TestClassWithSlowSetup:
 
     def test_query_fast_one(self):
         """Verifies fast query 1 against the initialized class resource."""
-        print("[method-1] Executing query 1 against shared resource...", flush=True)
+        print("\n[method-1] Executing query 1 against shared resource...", flush=True)
+        time.sleep(0.25)
         assert self.shared_resource["connected"] is True
         assert self.shared_resource["pool_size"] == 10
 
     def test_query_fast_two(self):
         """Verifies fast query 2 against the initialized class resource."""
-        print("[method-2] Executing query 2 against shared resource...", flush=True)
+        print("\n[method-2] Executing query 2 against shared resource...", flush=True)
+        time.sleep(0.25)
         assert self.shared_resource["pool_size"] >= 5
 
 
@@ -43,10 +45,12 @@ class TestClassWithMethodFixtures:
 
     def test_fixture_case_alpha(self):
         print("[test-alpha] Running alpha case", flush=True)
+        time.sleep(0.25)
         assert 1 + 1 == 2
 
     def test_fixture_case_beta(self):
         print("[test-beta] Running beta case", flush=True)
+        time.sleep(0.25)
         assert 2 * 3 == 6
 
 
@@ -56,9 +60,9 @@ def test_long_running_pipeline():
     print("\n" + "=" * 50, flush=True)
     print("\x1b[1;36m[pipeline]\x1b[0m Starting 3-phase simulation...", flush=True)
     phases = [
-        ("Phase 1: Ingesting dataset chunks", 0.4),
-        ("Phase 2: Computing statistical moments", 0.4),
-        ("Phase 3: Validating schema compliance", 0.4),
+        ("Phase 1: Ingesting dataset chunks", 0.35),
+        ("Phase 2: Computing statistical moments", 0.35),
+        ("Phase 3: Validating schema compliance", 0.35),
     ]
     for desc, delay in phases:
         print(f"  -> {desc}...", flush=True)
@@ -70,7 +74,8 @@ def test_long_running_pipeline():
 
 def test_mixed_stdout_stderr_streams():
     """Outputs both to stdout and stderr to verify stream capture."""
-    print("[stdout] Normal information message", file=sys.stdout, flush=True)
+    print("\n[stdout] Normal information message", file=sys.stdout, flush=True)
+    time.sleep(0.2)
     print("[stderr] Warning: sample non-fatal diagnostics", file=sys.stderr, flush=True)
     assert True
 
