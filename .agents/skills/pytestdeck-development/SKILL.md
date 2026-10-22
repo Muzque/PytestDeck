@@ -3,8 +3,9 @@ name: pytestdeck-development
 description: >-
   Standard end-to-end development workflow for PytestDeck. Use this skill when
   implementing GitHub issues, developing new features, fixing bugs, or adding tests.
-  Covers issue intake, architecture boundary rules, branching, testing pyramid (unit,
-  integration, acceptance, e2e), linting, build, and git commit standards.
+  Covers issue intake, branching, test-first / TDD use case preparation, architecture
+  boundary rules, testing pyramid (unit, integration, acceptance, e2e), linting,
+  build, and git commit standards.
 ---
 
 # 🚀 PytestDeck Development Workflow Guide
@@ -44,7 +45,24 @@ description: >-
 
 ---
 
-## 3. 架構分層與實作規範 (Architecture & Boundaries)
+## 3. 測試先行與 Use Case 準備 (Test-First & Use Case Preparation)
+
+**在動手修改或撰寫實作程式碼 (Production Code) 之前，必須先撰寫測試案例 (Test Cases)**，嚴格落實 Test-First / TDD 原則：
+
+1. **檢驗現有 Use Case 與目標專案資源**：
+   - 檢查 `sample-target-repo` 與 PytestDeck 測試套件中是否已經存在能夠重現問題、或足以驗證新功能的 Use Case。
+   - **重要**：若 `sample-target-repo` 根本沒有該功能的使用場景（例如缺乏特定測試結構、logger 配置、非同步測試、或 step 定義），**絕對不可直接通靈實作程式碼**。
+2. **建立/補齊測試案例與 Use Case**：
+   - **在目標專案建立真實情境**：先在 `sample-target-repo` 撰寫符合需求的 feature 檔案、step definitions、單元或整合測試（例如新增 `tests/acceptance/features/<usecase>.feature`、設定 `pytest.ini` / `behave.ini` 等）。
+   - **在專案端撰寫測試**：在 `backend/tests/` 或 `frontend/e2e/` 撰寫單元/整合/端到端測試，定義期望的行為、API 規格或 WebSocket 訊息協定。
+3. **驗證測試可重現問題 (Red Phase)**：
+   - 執行剛剛建立的測試，確認該測試能成功跑起並重現錯誤，或是明確指出缺少的功能。
+4. **進入實作修復 (Green Phase)**：
+   - 只有在測試案例與驗證情境皆已就緒並能精準捕捉預期行為後，才開始編寫業務邏輯與架構程式碼。
+
+---
+
+## 4. 架構分層與實作規範 (Architecture & Boundaries)
 
 嚴格遵守專案的領域驅動設計（DDD）分層與前後端職責劃分：
 
@@ -70,7 +88,7 @@ description: >-
 
 ---
 
-## 4. 驗證與測試金字塔 (Testing & Verification Pipeline)
+## 5. 驗證與測試金字塔 (Testing & Verification Pipeline)
 
 在任何程式碼提交前，必須通過對應層級的自動化驗收：
 
@@ -110,7 +128,7 @@ description: >-
 
 ---
 
-## 5. 提交與 PR 規範 (Git Commit Standards)
+## 6. 提交與 PR 規範 (Git Commit Standards)
 
 遵守 Conventional Commits 與 50/72 格式規範：
 
@@ -136,10 +154,11 @@ Refs #<issue_number>
 
 ---
 
-## 6. 開發檢核清單 (Developer Checklist)
+## 7. 開發檢核清單 (Developer Checklist)
 
 在將任務回報為完成前，確認以下項目：
 - [ ] 已詳讀 Issue 並解決所有 acceptance criteria
+- [ ] 測試先行：已在動手寫程式碼前，先在目標專案 (sample-target-repo) 或測試套件建立對應的 test case / use case
 - [ ] 未更動無關檔案（維持乾淨 diff）
 - [ ] 通過 `make lint`，無任何 warning 或 error
 - [ ] 相關單元與驗收測試皆通過

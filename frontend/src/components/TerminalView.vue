@@ -21,23 +21,6 @@ let lastLogCount = 0
 let hasSessionStarted = false
 let preSessionBuffer = []
 
-const isSessionStart = (line) => {
-  if (typeof line !== 'string') return false
-  return line.includes('test session starts') || line.trimStart().startsWith('Feature:')
-}
-
-const filterSessionLogs = (allLogs) => {
-  if (!allLogs || allLogs.length === 0) return []
-  const idx = allLogs.findIndex(isSessionStart)
-  if (idx === -1) return allLogs
-  if (allLogs[idx].includes('test session starts')) {
-    return allLogs.slice(idx + 1)
-  }
-  return allLogs.slice(idx)
-}
-
-const copied = ref(false)
-
 // eslint-disable-next-line no-control-regex
 const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
 
@@ -45,6 +28,25 @@ const stripAnsi = (str) => {
   if (!str) return ''
   return str.replace(ANSI_REGEX, '')
 }
+
+const isSessionStart = (line) => {
+  if (typeof line !== 'string') return false
+  const clean = stripAnsi(line)
+  return clean.includes('test session starts') || clean.trimStart().startsWith('Feature:')
+}
+
+const filterSessionLogs = (allLogs) => {
+  if (!allLogs || allLogs.length === 0) return []
+  const idx = allLogs.findIndex(isSessionStart)
+  if (idx === -1) return allLogs
+  const clean = stripAnsi(allLogs[idx])
+  if (clean.includes('test session starts')) {
+    return allLogs.slice(idx + 1)
+  }
+  return allLogs.slice(idx)
+}
+
+const copied = ref(false)
 
 const copyOutput = async () => {
   const displayLogs = filterSessionLogs(props.logs)
@@ -187,10 +189,11 @@ watch(() => props.logs, (newLogs) => {
 
     for (const line of appended) {
       if (!hasSessionStarted) {
-        if (line.includes('= test session starts =')) {
+        const clean = stripAnsi(line)
+        if (clean.includes('= test session starts =')) {
           hasSessionStarted = true
           preSessionBuffer = []
-        } else if (line.trimStart().startsWith('Feature:')) {
+        } else if (clean.trimStart().startsWith('Feature:')) {
           hasSessionStarted = true
           preSessionBuffer = []
           term.write(line)

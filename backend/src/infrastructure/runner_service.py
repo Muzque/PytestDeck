@@ -87,8 +87,14 @@ class SubprocessRunnerService:
         env["FORCE_COLOR"] = "1"
         apply_target_venv(env)
 
-        # Ensure target repository root is on PYTHONPATH
+        # Ensure target repository root, target src (if exists), and PytestDeck backend/src are on PYTHONPATH
         src_paths = [str(self.target_path)]
+        target_src = (self.target_path / "src").resolve()
+        if target_src.is_dir() and str(target_src) not in src_paths:
+            src_paths.append(str(target_src))
+        backend_src = str(Path(__file__).parent.parent.resolve())
+        if backend_src not in src_paths:
+            src_paths.append(backend_src)
         existing_pythonpath = env.get("PYTHONPATH", "")
         if existing_pythonpath:
             src_paths.append(existing_pythonpath)
