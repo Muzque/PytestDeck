@@ -479,10 +479,23 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(calcFileRow).toBeVisible()
     await expect(slowFileRow).toBeVisible()
 
-    // 1. Run all unit tests first so both files have previous outcome colors
+    // 1. Click Run Selected (0) (unselected Run All) and verify all files in active suite enter running state
     await page.locator('.btn-primary').click()
     const stopBtn = page.locator('.btn-danger')
-    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(rootDirRow).toHaveClass(/row-has-running/)
+    await expect(slowFileRow).toHaveClass(/row-has-running/)
+    await expect(rootDirRow.locator('.rollup-chip.running')).toBeVisible()
+
+    // Simulate browser window regaining focus mid-run; verify running state is NOT overwritten
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await expect(slowFileRow).toHaveClass(/row-has-running/)
+    await expect(rootDirRow).toHaveClass(/row-has-running/)
+
+    // Clicking a row while running should NOT toggle selection
+    await calcFileRow.click()
+    await expect(calcFileRow).not.toHaveClass(/is-selected/)
+
     await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
 
     // Both collapsed files now have previous run result colors
@@ -547,6 +560,58 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(slowFileRow).not.toHaveClass(/row-has-running/)
     await expect(rootDirRow).not.toHaveClass(/row-has-running/)
     await expect(slowFileRow).toHaveClass(/row-has-/)
+  })
+
+  test('should update live running state and rollup chips across Integration and Acceptance suites', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // 1. Switch to Integration Tests (which prints === banners and multi-line log_cli logs)
+    const suiteSelect = page.locator('.suite-select')
+    await suiteSelect.selectOption({ index: 1 })
+
+    const apiFileRow = page.locator('.node-row:has-text("test_app_api.py")')
+    await expect(apiFileRow).toBeVisible({ timeout: 15000 })
+
+    // Expand test_app_api.py so class and methods are visible
+    await apiFileRow.locator('.toggle-icon').click()
+    const apiClassRow = page.locator('.node-row:has-text("TestCalculatorApiService")')
+    const lastApiMethodRow = page.locator('.node-row:has-text("test_divide_by_zero_error_message")')
+    await expect(apiClassRow).toBeVisible()
+    await expect(lastApiMethodRow).toBeVisible()
+
+    // Select test_app_api.py and run
+    await apiFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(apiFileRow).toHaveClass(/row-has-running/)
+    await expect(apiClassRow).toHaveClass(/row-has-running/)
+    await expect(lastApiMethodRow).toHaveClass(/row-outcome-running/)
+
+    // Wait for completion and verify TestCalculatorApiService methods updated despite === batch log banners
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+    await expect(apiFileRow).not.toHaveClass(/row-has-running/)
+    await expect(apiClassRow).not.toHaveClass(/row-has-running/)
+    await expect(lastApiMethodRow).toHaveClass(/row-outcome-passed/)
+
+    // 2. Switch to Acceptance Tests and run with Run Selected (0) (unselected Run All)
+    await suiteSelect.selectOption({ index: 2 })
+    const featureFileRow = page.locator('.node-row:has-text("streaming_logger.feature")')
+    await expect(featureFileRow).toBeVisible({ timeout: 15000 })
+    await featureFileRow.locator('.toggle-icon').click()
+
+    const slowScenarioRow = page.locator('.node-row:has-text("Sequential steps with live logging progression")')
+    await expect(slowScenarioRow).toBeVisible()
+
+    await page.locator('.btn-primary').click()
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(featureFileRow).toHaveClass(/row-has-running/)
+    await expect(slowScenarioRow).toHaveClass(/row-outcome-running/)
+
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+    await expect(featureFileRow).not.toHaveClass(/row-has-running/)
+    await expect(slowScenarioRow).toHaveClass(/row-outcome-passed/)
   })
 })
 

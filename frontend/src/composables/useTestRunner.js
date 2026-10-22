@@ -672,21 +672,41 @@ export function useTestRunner() {
             isRunning.value = false
             exitCode.value = msg.exit_code
             summary.value = msg.summary
+            if (currentLiveNodeId && currentLiveScenarioOutcome) {
+              const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+              const elapsed = currentLiveNodeStartTime !== null ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
+              applyLiveOutcome(currentLiveNodeId, currentLiveScenarioOutcome, elapsed)
+            }
             currentLiveNodeId = null
             currentLiveFeatureFile = null
             currentLiveScenarioOutcome = null
 
-            const baseOutputs = preRunMethodOutputs !== null ? { ...preRunMethodOutputs } : { ...methodOutputs.value }
+            const liveSnapshot = { ...methodOutputs.value }
+            const baseOutputs = preRunMethodOutputs !== null ? { ...preRunMethodOutputs } : {}
+            for (const [k, v] of Object.entries(liveSnapshot)) {
+              if (v && v.outcome && v.outcome !== 'running') {
+                baseOutputs[k] = v
+              }
+            }
             preRunMethodOutputs = null
 
             if (msg.method_outputs) {
               for (const [newKey, newVal] of Object.entries(msg.method_outputs)) {
+                let prevLive = baseOutputs[newKey]
                 for (const existingKey of Object.keys(baseOutputs)) {
                   if (existingKey !== newKey && (existingKey.endsWith(newKey) || newKey.endsWith(existingKey))) {
+                    if (!prevLive) prevLive = baseOutputs[existingKey]
                     delete baseOutputs[existingKey]
                   }
                 }
-                baseOutputs[newKey] = newVal
+                const mergedVal = { ...newVal }
+                if ((!mergedVal.outcome || mergedVal.outcome === 'unknown') && prevLive?.outcome && prevLive.outcome !== 'running' && prevLive.outcome !== 'unknown') {
+                  mergedVal.outcome = prevLive.outcome
+                }
+                if ((mergedVal.duration === null || mergedVal.duration === undefined) && prevLive?.duration !== null && prevLive?.duration !== undefined) {
+                  mergedVal.duration = prevLive.duration
+                }
+                baseOutputs[newKey] = mergedVal
               }
               methodOutputs.value = baseOutputs
               try {

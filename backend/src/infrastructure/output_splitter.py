@@ -46,6 +46,15 @@ class MethodOutputCollector:
             }
 
 
+    def _finalize_behave_scenario(self) -> None:
+        if (
+            self.current_node
+            and ".feature::" in self.current_node
+            and self.current_node in self.method_outputs
+            and self.method_outputs[self.current_node]["outcome"] == "unknown"
+        ):
+            self.method_outputs[self.current_node]["outcome"] = "passed"
+
     def process_line(self, raw_line: str) -> None:
         """Processes a single streamed stdout line, segmenting output by test method boundaries."""
         clean = ANSI_ESCAPE.sub("", raw_line).rstrip("\r\n")
@@ -56,21 +65,30 @@ class MethodOutputCollector:
             self.method_outputs[self.single_node_id]["lines"].append(raw_line)
             if "PASSED" in clean and self.method_outputs[self.single_node_id]["outcome"] == "unknown":
                 self.method_outputs[self.single_node_id]["outcome"] = "passed"
-            elif "FAILED" in clean:
+            elif "FAILED" in clean or "\x1b[31m" in raw_line or "Assertion Failed:" in clean or "Traceback (most recent call last):" in clean:
                 self.method_outputs[self.single_node_id]["outcome"] = "failed"
             elif "SKIPPED" in clean and self.method_outputs[self.single_node_id]["outcome"] == "unknown":
                 self.method_outputs[self.single_node_id]["outcome"] = "skipped"
+            elif (
+                ".feature::" in self.single_node_id
+                and re.match(r"^\d+\s+features?\s+passed", stripped)
+                and self.method_outputs[self.single_node_id]["outcome"] == "unknown"
+            ):
+                self.method_outputs[self.single_node_id]["outcome"] = "passed"
             return
 
         # Check for Behave feature header
         feat_match = BEHAVE_FEATURE_PATTERN.match(stripped)
         if feat_match and feat_match.group(2):
+            self._finalize_behave_scenario()
             self.current_feature_file = feat_match.group(2)
+            self.current_node = None
             return
 
         # Check for Behave scenario header
         sc_match = BEHAVE_SCENARIO_PATTERN.match(stripped)
         if sc_match:
+            self._finalize_behave_scenario()
             title = sc_match.group(1).strip()
             feat_file = sc_match.group(2) or self.current_feature_file or ""
             node_id = f"{feat_file}::{title}" if feat_file else title
@@ -134,10 +152,24 @@ class MethodOutputCollector:
             if stripped.startswith(("=====", "short test summary")):
                 self.current_node = None
                 return
+            if ".feature::" in self.current_node and (
+                re.match(r"^\d+\s+features?\s+passed", stripped)
+                or stripped.startswith("Failing scenarios:")
+            ):
+                if self.method_outputs[self.current_node]["outcome"] == "unknown":
+                    self.method_outputs[self.current_node]["outcome"] = "passed"
+                self.current_node = None
+                return
             self.method_outputs[self.current_node]["lines"].append(raw_line)
             if "PASSED" in clean and self.method_outputs[self.current_node]["outcome"] == "unknown":
                 self.method_outputs[self.current_node]["outcome"] = "passed"
-            elif "FAILED" in clean:
+            elif (
+                "FAILED" in clean
+                or (
+                    ".feature::" in self.current_node
+                    and ("\x1b[31m" in raw_line or "Assertion Failed:" in clean or "Traceback (most recent call last):" in clean)
+                )
+            ):
                 self.method_outputs[self.current_node]["outcome"] = "failed"
             elif "SKIPPED" in clean and self.method_outputs[self.current_node]["outcome"] == "unknown":
                 self.method_outputs[self.current_node]["outcome"] = "skipped"
