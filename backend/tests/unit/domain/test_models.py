@@ -87,7 +87,15 @@ def test_behave_config_build_command():
     """Verifies that BehaveConfig constructs correct command line arguments."""
     # Default command
     cfg = BehaveConfig()
-    assert cfg.build_command() == ["uv", "run", "behave", "--color=always"]
+    assert cfg.build_command() == [
+        "uv",
+        "run",
+        "behave",
+        "--color=always",
+        "--no-capture-log",
+        "-f",
+        "infrastructure.behave_formatter:AppendPrettyFormatter",
+    ]
 
     # Command with nodes and extra_args
     cfg_full = BehaveConfig(
@@ -100,10 +108,22 @@ def test_behave_config_build_command():
         "run",
         "behave",
         "--color=always",
+        "--no-capture-log",
+        "-f",
+        "infrastructure.behave_formatter:AppendPrettyFormatter",
         "--tags=@smoke",
         "tests/acceptance",
         "features/login.feature",
     ]
+
+
+def test_behave_config_custom_format_override():
+    """Verifies that a custom format specified in extra_args overrides default formatter."""
+    cfg = BehaveConfig(extra_args=["-f", "plain", "--tags=@smoke"])
+    cmd = cfg.build_command()
+    assert "infrastructure.behave_formatter:AppendPrettyFormatter" not in cmd
+    assert "-f" in cmd
+    assert "plain" in cmd
 
 
 def test_behave_config_translates_s_flag():

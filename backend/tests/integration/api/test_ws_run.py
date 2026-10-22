@@ -62,3 +62,38 @@ def test_ws_run_invalid_json():
         msg = websocket.receive_json()
         assert msg.get("type") == "error"
 
+
+def test_ws_run_behave_streaming_sequential_steps():
+    """Verifies that Behave test runs stream every step sequentially without cursor-up and retain log output."""
+    backend_path = str(Path(__file__).resolve().parents[3])
+    with client.websocket_connect("/ws/run") as websocket:
+        websocket.send_json({
+            "action": "START",
+            "target_path": backend_path,
+            "nodes": ["tests/acceptance/features/api_health.feature"],
+        })
+        messages = []
+        while True:
+            msg = websocket.receive_json()
+            messages.append(msg)
+            if msg.get("type") == "finished":
+                break
+
+    stdout_lines = [m["data"] for m in messages if m.get("type") == "stdout"]
+    all_output = "".join(stdout_lines)
+
+    import re
+    clean_output = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", all_output)
+
+    # 1. Must contain all steps in order
+    assert "Given PytestDeck backend is running" in clean_output
+    assert "When a health request is sent" in clean_output
+    assert "Then the response status should be 200" in clean_output
+
+    # 2. Must stream live logger output during run (even for passing scenario)
+    assert any("LOG_INFO:httpx" in line for line in stdout_lines)
+
+    # 3. Must NOT contain any cursor-up escape sequences \x1b[{n}A
+    assert not any(f"\x1b[{i}A" in line for i in range(1, 10) for line in stdout_lines)
+
+

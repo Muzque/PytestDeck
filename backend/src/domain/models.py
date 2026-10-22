@@ -152,14 +152,29 @@ class BehaveConfig(BaseExecutionConfig):
         """
         import re
 
-        cmd = ["uv", "run", "behave", "--color=always"]
+        cmd = [
+            "uv",
+            "run",
+            "behave",
+            "--color=always",
+            "--no-capture-log",
+            "-f",
+            "infrastructure.behave_formatter:AppendPrettyFormatter",
+        ]
         if self.extra_args:
             translated_args = []
+            has_custom_format = False
             for arg in self.extra_args:
                 if arg == "-s":
                     translated_args.append("--no-capture")
                 else:
+                    if arg in ("-f", "--format") or arg.startswith(("-f=", "--format=")):
+                        has_custom_format = True
                     translated_args.append(arg)
+            if has_custom_format and "-f" in cmd:
+                f_idx = cmd.index("-f")
+                cmd.pop(f_idx + 1)
+                cmd.pop(f_idx)
             cmd.extend(translated_args)
 
         if self.nodes:

@@ -33,7 +33,7 @@ integration-test: ## Run integration tests
 
 acceptance-test: ## Run acceptance / BDD tests (e.g. make acceptance-test FEATURES="tests/acceptance/features/self_test.feature")
 	@echo "Running Acceptance Tests..."
-	cd backend && PYTHONPATH=src uv run behave $(if $(FEATURES),$(FEATURES),tests/acceptance/features)
+	cd backend && PYTHONPATH=src uv run behave --color=always --no-capture-log -f infrastructure.behave_formatter:AppendPrettyFormatter $(if $(FEATURES),$(FEATURES),tests/acceptance/features)
 
 e2e-test: ## Run frontend Playwright E2E tests
 	@echo "Running Frontend E2E Tests..."

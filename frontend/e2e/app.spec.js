@@ -225,7 +225,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(fileToggle).toBeVisible({ timeout: 15000 })
     await fileToggle.click()
 
-    // Select a test method
+    // Wait for and select a test method
     const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
     await expect(funcRow).toBeVisible({ timeout: 15000 })
     await funcRow.click()
@@ -434,6 +434,39 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     // Button should now be disabled and count back to 0
     await expect(clearSelectionBtn).toBeDisabled()
     await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (0)')
+  })
+
+  test('should append acceptance steps and stream logger output in terminal during behave run', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Switch to Acceptance suite (index 2)
+    const select = page.locator('.suite-select')
+    await select.selectOption({ index: 2 })
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Find streaming_logger.feature node row and select its checkbox
+    const fileRow = page.locator('.node-row:has-text("streaming_logger.feature")')
+    await expect(fileRow).toBeVisible({ timeout: 15000 })
+    await fileRow.locator('.node-checkbox').click()
+
+    // Click Run Selected
+    const runBtn = page.locator('.btn-primary')
+    await expect(runBtn).toBeVisible()
+    await runBtn.click()
+
+    // Wait for execution completion
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+    await expect(runBtn).toBeVisible()
+
+    // Check terminal output contains all sequential steps and live logs
+    const terminalText = await page.locator('.terminal-wrapper .xterm-rows').innerText()
+    expect(terminalText).toContain('Given a step that initializes calculation logger')
+    expect(terminalText).toContain('When a step logs multiple progress messages with delays')
+    expect(terminalText).toContain('Then a final step verifies that all previous logs remain visible')
+    expect(terminalText).toContain('Starting calculation step 1')
+    expect(terminalText).toContain('Processing batch 1')
   })
 })
 
