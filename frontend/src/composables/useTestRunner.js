@@ -313,21 +313,77 @@ export function useTestRunner() {
     return result
   }
 
+  const isSameTestNodeId = (idA, idB) => {
+    if (!idA || !idB) return false
+    const normA = idA.replace(/\\/g, '/')
+    const normB = idB.replace(/\\/g, '/')
+    if (normA === normB) return true
+    const sepA = normA.indexOf('::')
+    const sepB = normB.indexOf('::')
+    if (sepA === -1 || sepB === -1) {
+      return normA.endsWith('/' + normB) || normB.endsWith('/' + normA)
+    }
+    const tailA = normA.slice(sepA)
+    const tailB = normB.slice(sepB)
+    if (tailA !== tailB) return false
+    const fileA = normA.slice(0, sepA)
+    const fileB = normB.slice(0, sepB)
+    return fileA === fileB || fileA.endsWith('/' + fileB) || fileB.endsWith('/' + fileA)
+  }
+
+  const extractPytestNodeId = (stripped) => {
+    const m = stripped.match(/^([a-zA-Z0-9_\-./\\]+\.py::[a-zA-Z0-9_\-.:]+)(.*)$/)
+    if (!m) return null
+    const prefix = m[1]
+    const rest = m[2] || ''
+    if (!rest.startsWith('[')) {
+      return { nodeId: prefix, rest }
+    }
+    let depth = 0
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '[') depth++
+      else if (rest[i] === ']') {
+        depth--
+        if (depth === 0) {
+          return {
+            nodeId: prefix + rest.slice(0, i + 1),
+            rest: rest.slice(i + 1)
+          }
+        }
+      }
+    }
+    const firstToken = rest.split(/\s+/)[0]
+    return {
+      nodeId: prefix + firstToken,
+      rest: rest.slice(firstToken.length)
+    }
+  }
+
   const applyLiveOutcome = (nodeId, outcome, duration = null) => {
     if (!nodeId || !outcome) return
     const updated = { ...methodOutputs.value }
-    let matched = false
-    for (const key of Object.keys(updated)) {
-      if (key === nodeId || nodeId.endsWith(key) || key.endsWith(nodeId)) {
-        updated[key] = {
-          ...updated[key],
-          outcome,
-          duration: duration !== null ? duration : updated[key]?.duration ?? null
+    let bestKey = null
+    if (updated[nodeId]) {
+      bestKey = nodeId
+    } else {
+      let bestDiff = Infinity
+      for (const key of Object.keys(updated)) {
+        if (isSameTestNodeId(key, nodeId)) {
+          const diff = Math.abs(key.length - nodeId.length)
+          if (diff < bestDiff) {
+            bestDiff = diff
+            bestKey = key
+          }
         }
-        matched = true
       }
     }
-    if (!matched) {
+    if (bestKey) {
+      updated[bestKey] = {
+        ...updated[bestKey],
+        outcome,
+        duration: duration !== null ? duration : updated[bestKey]?.duration ?? null
+      }
+    } else {
       updated[nodeId] = {
         node_id: nodeId,
         outcome,
@@ -381,7 +437,7 @@ export function useTestRunner() {
           const dur = currentLiveNodeStartTime ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
           applyLiveOutcome(currentLiveNodeId, currentLiveScenarioOutcome, dur)
         }
-        const title = scMatch[1].trim()
+        const title = scMatch[1].replace(/\s+--\s+@\d+\.\d+.*$/, '').trim()
         const featFile = scMatch[2] || currentLiveFeatureFile || ''
         currentLiveNodeId = featFile ? `${featFile}::${title}` : title
         currentLiveNodeStartTime = now
@@ -412,10 +468,10 @@ export function useTestRunner() {
         !stripped.startsWith('plugins:') &&
         !stripped.startsWith('FAILURES')
       ) {
-        const pyMatch = stripped.match(/^([^\s]+\.py::[^\s]+)(?:\s+(.*))?$/)
-        if (pyMatch) {
-          const nid = pyMatch[1]
-          const rest = pyMatch[2] || ''
+        const parsedPy = extractPytestNodeId(stripped)
+        if (parsedPy) {
+          const nid = parsedPy.nodeId
+          const rest = parsedPy.rest || ''
           const immediateOutcome = parsePytestStatus(rest)
           if (immediateOutcome) {
             const dur = lastLiveStepTime ? Math.max(0, (now - lastLiveStepTime) / 1000) : 0.0005
@@ -693,20 +749,36 @@ export function useTestRunner() {
             if (msg.method_outputs) {
               for (const [newKey, newVal] of Object.entries(msg.method_outputs)) {
                 let prevLive = baseOutputs[newKey]
-                for (const existingKey of Object.keys(baseOutputs)) {
-                  if (existingKey !== newKey && (existingKey.endsWith(newKey) || newKey.endsWith(existingKey))) {
-                    if (!prevLive) prevLive = baseOutputs[existingKey]
-                    delete baseOutputs[existingKey]
+                let canonicalKey = newKey
+                if (!prevLive) {
+                  let bestMatchKey = null
+                  let bestDiff = Infinity
+                  for (const existingKey of Object.keys(baseOutputs)) {
+                    if (existingKey !== newKey && isSameTestNodeId(existingKey, newKey)) {
+                      const diff = Math.abs(existingKey.length - newKey.length)
+                      if (diff < bestDiff) {
+                        bestDiff = diff
+                        bestMatchKey = existingKey
+                      }
+                    }
+                  }
+                  if (bestMatchKey) {
+                    prevLive = baseOutputs[bestMatchKey]
+                    if (bestMatchKey.length > canonicalKey.length) {
+                      canonicalKey = bestMatchKey
+                    } else {
+                      delete baseOutputs[bestMatchKey]
+                    }
                   }
                 }
-                const mergedVal = { ...newVal }
+                const mergedVal = { ...newVal, node_id: canonicalKey }
                 if ((!mergedVal.outcome || mergedVal.outcome === 'unknown') && prevLive?.outcome && prevLive.outcome !== 'running' && prevLive.outcome !== 'unknown') {
                   mergedVal.outcome = prevLive.outcome
                 }
                 if ((mergedVal.duration === null || mergedVal.duration === undefined) && prevLive?.duration !== null && prevLive?.duration !== undefined) {
                   mergedVal.duration = prevLive.duration
                 }
-                baseOutputs[newKey] = mergedVal
+                baseOutputs[canonicalKey] = mergedVal
               }
               methodOutputs.value = baseOutputs
               try {

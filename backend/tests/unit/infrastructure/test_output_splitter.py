@@ -162,3 +162,106 @@ def test_merge_json_report_enriches_captured_output():
     assert "Log line 2" in output
     assert "Warning: cache miss" in output
 
+
+def test_parametrized_special_chars_and_canonical_node_id_merge():
+    collector = MethodOutputCollector(requested_nodes=["tests/unit/test_calculator.py"])
+    collector.process_line(
+        "tests/unit/test_calculator.py::test_add_with_custom_ids[1 + 2 = 3 (positive)] PASSED [ 50%]\n"
+    )
+    collector.process_line(
+        "tests/unit/test_calculator.py::test_add_with_custom_ids[a=-4, b=10 -> 6] PASSED [100%]\n"
+    )
+
+    report = {
+        "tests": [
+            {
+                "nodeid": "test_calculator.py::test_add_with_custom_ids[1 + 2 = 3 (positive)]",
+                "outcome": "passed",
+                "call": {"duration": 0.1234, "outcome": "passed"},
+            },
+            {
+                "nodeid": "test_calculator.py::test_add_with_custom_ids[a=-4, b=10 -> 6]",
+                "outcome": "passed",
+                "call": {"duration": 0.2345, "outcome": "passed"},
+            },
+        ]
+    }
+    collector.merge_json_report(report)
+    res = collector.get_results()
+
+    k1 = "tests/unit/test_calculator.py::test_add_with_custom_ids[1 + 2 = 3 (positive)]"
+    k2 = "tests/unit/test_calculator.py::test_add_with_custom_ids[a=-4, b=10 -> 6]"
+    assert k1 in res
+    assert k2 in res
+    assert res[k1]["outcome"] == "passed"
+    assert res[k1]["duration"] == 0.1234
+    assert res[k2]["outcome"] == "passed"
+    assert res[k2]["duration"] == 0.2345
+    assert "tests/unit/test_calculator.py::test_add_with_custom_ids[1" not in res
+    assert "tests/unit/test_calculator.py::test_add_with_custom_ids[a" not in res
+    assert "test_calculator.py::test_add_with_custom_ids[1 + 2 = 3 (positive)]" not in res
+
+
+def test_merge_json_report_does_not_steal_duration_across_same_named_functions():
+    collector = MethodOutputCollector(requested_nodes=["tests/unit"])
+    collector.process_line("tests/unit/extra_test_calc.py::test_add PASSED [ 33%]\n")
+    collector.process_line("tests/unit/sub/test_calc.py::test_add PASSED [ 66%]\n")
+    collector.process_line("tests/unit/test_calc.py::test_add PASSED [100%]\n")
+
+    report = {
+        "tests": [
+            {
+                "nodeid": "test_calc.py::test_add",
+                "outcome": "passed",
+                "call": {"duration": 0.1111, "outcome": "passed"},
+            },
+            {
+                "nodeid": "extra_test_calc.py::test_add",
+                "outcome": "passed",
+                "call": {"duration": 0.2222, "outcome": "passed"},
+            },
+            {
+                "nodeid": "sub/test_calc.py::test_add",
+                "outcome": "passed",
+                "call": {"duration": 0.3333, "outcome": "passed"},
+            },
+        ]
+    }
+    collector.merge_json_report(report)
+    res = collector.get_results()
+
+    assert res["tests/unit/test_calc.py::test_add"]["duration"] == 0.1111
+    assert res["tests/unit/extra_test_calc.py::test_add"]["duration"] == 0.2222
+    assert res["tests/unit/sub/test_calc.py::test_add"]["duration"] == 0.3333
+
+
+def test_behave_scenario_and_outline_accumulate_step_durations():
+    text = (
+        "Feature: Calculator Operations # tests/acceptance/features/calculator.feature:1\n"
+        "  Scenario: Addition of two numbers  # tests/acceptance/features/calculator.feature:7\n"
+        "    Given I have a calculator        # tests/acceptance/steps/calculator_steps.py:4 0.050s\n"
+        "    When I add 5 and 7               # tests/acceptance/steps/calculator_steps.py:9 0.120s\n"
+        "    Then the result should be 12     # tests/acceptance/steps/calculator_steps.py:19 0.030s\n"
+        "\n"
+        "  Scenario Outline: Parameterized arithmetic verification -- @1.1   # tests/acceptance/features/calculator.feature:31\n"
+        "    Given I have a calculator                                       # tests/acceptance/steps/calculator_steps.py:4 0.010s\n"
+        "    When I add 1 and 2                                              # tests/acceptance/steps/calculator_steps.py:9 0.040s\n"
+        "  Scenario Outline: Parameterized arithmetic verification -- @1.2   # tests/acceptance/features/calculator.feature:32\n"
+        "    Given I have a calculator                                       # tests/acceptance/steps/calculator_steps.py:4 0.020s\n"
+        "    When I add 15 and 25                                            # tests/acceptance/steps/calculator_steps.py:9 0.080s\n"
+        "1 feature passed, 0 failed, 0 skipped\n"
+    )
+    collector = MethodOutputCollector()
+    for line in text.splitlines(keepends=True):
+        collector.process_line(line)
+
+    res = collector.get_results()
+    s1 = "tests/acceptance/features/calculator.feature::Addition of two numbers"
+    s2 = "tests/acceptance/features/calculator.feature::Parameterized arithmetic verification"
+    assert s1 in res
+    assert res[s1]["outcome"] == "passed"
+    assert res[s1]["duration"] == 0.2
+    assert s2 in res
+    assert res[s2]["outcome"] == "passed"
+    assert res[s2]["duration"] == 0.15
+

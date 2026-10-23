@@ -735,4 +735,58 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(historyItems.nth(0).locator('.history-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
     await expect(historyItems.nth(1).locator('.history-duration')).toHaveText(expectedPytestDuration)
   })
+
+  test('should show duration chip on every colored DirectoryTree function and scenario node including parametrized special chars', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // 1. Expand test_calculator.py and run it
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.toggle-icon').click()
+    await calcFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    const paramSpecial1 = page.locator('.node-row').filter({ hasText: 'test_add_with_custom_ids[1 + 2 = 3 (positive)]' })
+    const paramSpecial2 = page.locator('.node-row').filter({ hasText: 'test_add_with_custom_ids[a=-4, b=10 -> 6]' })
+    await expect(paramSpecial1).toHaveClass(/row-outcome-passed/)
+    await expect(paramSpecial1.locator('.node-duration')).toBeVisible()
+    await expect(paramSpecial1.locator('.node-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
+    await expect(paramSpecial2).toHaveClass(/row-outcome-passed/)
+    await expect(paramSpecial2.locator('.node-duration')).toBeVisible()
+    await expect(paramSpecial2.locator('.node-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
+
+    // Trigger window focus to reload stored methodOutputs from backend DB and confirm durations persist
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await page.waitForTimeout(300)
+    await expect(paramSpecial1.locator('.node-duration')).toBeVisible()
+    await expect(paramSpecial2.locator('.node-duration')).toBeVisible()
+
+    // 2. Switch to Acceptance Tests, expand calculator.feature, and run it
+    const suiteSelect = page.locator('.suite-select')
+    await suiteSelect.selectOption({ index: 2 })
+    const featureRow = page.locator('.node-row:has-text("calculator.feature")')
+    await expect(featureRow).toBeVisible({ timeout: 15000 })
+    await featureRow.locator('.toggle-icon').click()
+    await featureRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    const scenarioAdd = page.locator('.node-row').filter({ hasText: 'Addition of two numbers' })
+    const scenarioOutline = page.locator('.node-row').filter({ hasText: 'Parameterized arithmetic verification' })
+    await expect(scenarioAdd).toHaveClass(/row-outcome-passed/)
+    await expect(scenarioAdd.locator('.node-duration')).toBeVisible()
+    await expect(scenarioOutline).toHaveClass(/row-outcome-passed/)
+    await expect(scenarioOutline.locator('.node-duration')).toBeVisible()
+
+    // 3. Trigger window focus (re-fetches stored methodOutputs from backend DB) and verify durations remain present
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await page.waitForTimeout(300)
+    await expect(scenarioAdd.locator('.node-duration')).toBeVisible()
+    await expect(scenarioOutline.locator('.node-duration')).toBeVisible()
+  })
 })

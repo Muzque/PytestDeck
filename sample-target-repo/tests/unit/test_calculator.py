@@ -56,3 +56,18 @@ def test_add_parameterized(a, b, expected):
     time.sleep(0.12)
     calc = Calculator()
     assert calc.add(a, b) == expected
+
+
+@pytest.mark.parametrize(
+    "a,b,expected",
+    [
+        pytest.param(1, 2, 3, id="1 + 2 = 3 (positive)"),
+        pytest.param(-4, 10, 6, id="a=-4, b=10 -> 6"),
+    ],
+)
+def test_add_with_custom_ids(a, b, expected):
+    """Verifies parametrized test cases with spaces, equals, and punctuation in node IDs."""
+    time.sleep(0.12)
+    calc = Calculator()
+    assert calc.add(a, b) == expected
+
