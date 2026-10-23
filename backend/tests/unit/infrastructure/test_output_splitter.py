@@ -265,3 +265,30 @@ def test_behave_scenario_and_outline_accumulate_step_durations():
     assert res[s2]["outcome"] == "passed"
     assert res[s2]["duration"] == 0.15
 
+
+def test_merge_json_report_normalizes_xfailed_and_xpassed():
+    collector = MethodOutputCollector()
+    collector.process_line("tests/unit/test_slow.py::test_xfail XFAIL [ 50%]\n")
+    collector.process_line("tests/unit/test_slow.py::test_xpass XPASS [100%]\n")
+
+    report = {
+        "tests": [
+            {
+                "nodeid": "test_slow.py::test_xfail",
+                "outcome": "xfailed",
+                "call": {"duration": 0.01, "outcome": "skipped"},
+            },
+            {
+                "nodeid": "test_slow.py::test_xpass",
+                "outcome": "xpassed",
+                "call": {"duration": 0.02, "outcome": "passed"},
+            },
+        ]
+    }
+    collector.merge_json_report(report)
+    res = collector.get_results()
+
+    assert res["tests/unit/test_slow.py::test_xfail"]["outcome"] == "skipped"
+    assert res["tests/unit/test_slow.py::test_xpass"]["outcome"] == "passed"
+
+

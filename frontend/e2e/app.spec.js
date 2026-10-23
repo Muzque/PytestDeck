@@ -789,4 +789,129 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(scenarioAdd.locator('.node-duration')).toBeVisible()
     await expect(scenarioOutline.locator('.node-duration')).toBeVisible()
   })
+
+  test('should color DirectoryTree parent nodes by fail, not-run, and pass priority and show counts when expanded or collapsed', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // 1. Clear all history so every leaf node starts as not-run
+    await page.click('#btn-run-options')
+    await page.click('#btn-clear-history')
+    await expect(page.locator('.ro-history-cleared-msg')).toBeVisible()
+    await page.click('.ro-close')
+
+    const rootDirRow = page.locator('.node-row:has(.type-badge.directory)').first()
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+
+    // Verify expanded root directory and collapsed file row show row-has-not-run and only the not-run count chip
+    await expect(rootDirRow).toHaveClass(/row-has-not-run/)
+    await expect(rootDirRow.locator('.rollup-chip.not-run')).toBeVisible()
+    await expect(rootDirRow.locator('.rollup-chip.passed')).toHaveCount(0)
+    await expect(rootDirRow.locator('.rollup-chip.failed')).toHaveCount(0)
+    await expect(rootDirRow.locator('.rollup-chip.skipped')).toHaveCount(0)
+
+    await expect(slowFileRow).toHaveClass(/row-has-not-run/)
+    await expect(slowFileRow.locator('.rollup-chip.not-run')).toHaveText('8 ○')
+
+    // Expand slowFileRow and verify both the expanded file and expanded class show row-has-not-run and not-run chips
+    await slowFileRow.locator('.toggle-icon').click()
+    const slowClassRow = page.locator('.node-row:has-text("TestClassWithSlowSetup")')
+    const fixtureClassRow = page.locator('.node-row:has-text("TestClassWithMethodFixtures")')
+    const fastOneRow = page.locator('.node-row:has-text("test_query_fast_one")')
+
+    await expect(slowFileRow).toHaveClass(/row-has-not-run/)
+    await expect(slowFileRow.locator('.rollup-chip.not-run')).toHaveText('8 ○')
+    await expect(slowClassRow).toHaveClass(/row-has-not-run/)
+    await expect(slowClassRow.locator('.rollup-chip.not-run')).toHaveText('2 ○')
+
+    // 2. Run only 1 of the 2 methods in TestClassWithSlowSetup -> class has 1 passed + 1 not-run (stays gray row-has-not-run)
+    await fastOneRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Verify expanded class has row-has-not-run and shows 1 passed + 1 not-run
+    await expect(slowClassRow).toHaveClass(/row-has-not-run/)
+    await expect(slowClassRow).not.toHaveClass(/row-has-passed/)
+    await expect(slowClassRow.locator('.rollup-chip.passed')).toHaveText('1 ✓')
+    await expect(slowClassRow.locator('.rollup-chip.not-run')).toHaveText('1 ○')
+
+    // Collapse class and verify same color and counts while collapsed, then re-expand
+    await slowClassRow.locator('.toggle-icon').click()
+    await expect(slowClassRow).toHaveClass(/row-has-not-run/)
+    await expect(slowClassRow.locator('.rollup-chip.passed')).toHaveText('1 ✓')
+    await expect(slowClassRow.locator('.rollup-chip.not-run')).toHaveText('1 ○')
+    await slowClassRow.locator('.toggle-icon').click()
+
+    // 3. Run the entire test_slow_and_classes.py (6 passed, 2 skipped/xfail, 0 failed, 0 not-run)
+    await page.locator('#btn-clear-selection').click()
+    await slowFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Both expanded slowFileRow and slowClassRow should now be green (row-has-passed), ignoring skipped for parent color
+    await expect(slowClassRow).toHaveClass(/row-has-passed/)
+    await expect(slowClassRow.locator('.rollup-chip.passed')).toHaveText('2 ✓')
+    await expect(slowClassRow.locator('.rollup-chip.not-run')).toHaveCount(0)
+
+    await expect(slowFileRow).toHaveClass(/row-has-passed/)
+    await expect(slowFileRow.locator('.rollup-chip.passed')).toHaveText('6 ✓')
+    await expect(slowFileRow.locator('.rollup-chip.skipped')).toHaveText('2 –')
+    await expect(slowFileRow.locator('.rollup-chip.not-run')).toHaveCount(0)
+
+    // Meanwhile rootDirRow still has unrun tests in other unit files, so it remains gray (row-has-not-run)
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+    await expect(calcFileRow.locator('.rollup-chip.not-run')).toHaveText('11 ○')
+    await expect(rootDirRow).toHaveClass(/row-has-not-run/)
+    await expect(rootDirRow.locator('.rollup-chip.passed')).toHaveText('6 ✓')
+    await expect(rootDirRow.locator('.rollup-chip.skipped')).toHaveText('2 –')
+    await expect(rootDirRow.locator('.rollup-chip.not-run')).toHaveText('21 ○')
+
+    // 4. Verify fail > not-run priority (red) and skipped-only parent (no color) when expanded and collapsed
+    await page.route('**/api/test-runs*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          runs: {
+            'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_one': {
+              node_id: 'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_one',
+              outcome: 'failed',
+              duration: 0.05
+            },
+            'tests/unit/test_slow_and_classes.py::TestClassWithMethodFixtures::test_fixture_case_alpha': {
+              node_id: 'tests/unit/test_slow_and_classes.py::TestClassWithMethodFixtures::test_fixture_case_alpha',
+              outcome: 'skipped',
+              duration: 0.001
+            },
+            'tests/unit/test_slow_and_classes.py::TestClassWithMethodFixtures::test_fixture_case_beta': {
+              node_id: 'tests/unit/test_slow_and_classes.py::TestClassWithMethodFixtures::test_fixture_case_beta',
+              outcome: 'skipped',
+              duration: 0.001
+            }
+          }
+        })
+      })
+    })
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+
+    // TestClassWithSlowSetup has 1 failed + 1 not-run -> Red (row-has-failed) takes priority over not-run
+    await expect(slowClassRow).toHaveClass(/row-has-failed/)
+    await expect(slowClassRow).not.toHaveClass(/row-has-not-run/)
+    await expect(slowClassRow.locator('.rollup-chip.failed')).toHaveText('1 ✗')
+    await expect(slowClassRow.locator('.rollup-chip.not-run')).toHaveText('1 ○')
+
+    // TestClassWithMethodFixtures has 2 skipped (0 failed, 0 not-run, 0 passed) -> no parent outcome color, shows 2 skipped
+    await expect(fixtureClassRow.locator('.rollup-chip.skipped')).toHaveText('2 –')
+    await expect(fixtureClassRow.locator('.rollup-chip.not-run')).toHaveCount(0)
+    await expect(fixtureClassRow).not.toHaveClass(/row-has-failed|row-has-not-run|row-has-passed|row-has-skipped/)
+
+    // Collapse TestClassWithMethodFixtures and verify it still has no parent outcome color and shows 2 skipped
+    await fixtureClassRow.locator('.toggle-icon').click()
+    await expect(fixtureClassRow.locator('.rollup-chip.skipped')).toHaveText('2 –')
+    await expect(fixtureClassRow).not.toHaveClass(/row-has-failed|row-has-not-run|row-has-passed|row-has-skipped/)
+  })
 })
+

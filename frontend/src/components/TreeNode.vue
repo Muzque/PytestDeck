@@ -75,8 +75,16 @@ const nodeRecord = computed(() => {
   return findNodeRecord(props.methodOutputs || {}, props.node.id)
 })
 
+const normalizeOutcome = (raw) => {
+  if (!raw) return null
+  const lower = raw.toLowerCase()
+  if (lower === 'xfailed' || lower === 'xfail') return 'skipped'
+  if (lower === 'xpassed' || lower === 'xpass') return 'passed'
+  return lower
+}
+
 const nodeOutcome = computed(() => {
-  return nodeRecord.value?.outcome ? nodeRecord.value.outcome.toLowerCase() : null
+  return normalizeOutcome(nodeRecord.value?.outcome)
 })
 
 const outcomeTitle = computed(() => {
@@ -98,13 +106,13 @@ const formattedDuration = computed(() => {
   return `${num.toFixed(2)}s`
 })
 
-// Calculate aggregated outcomes for collapsed directories and files
+// Calculate aggregated outcomes for parent nodes (directories, files, and classes)
 const rollupCounts = computed(() => {
   if (!props.node.children || props.node.children.length === 0) {
-    return { total: 0, passed: 0, failed: 0, skipped: 0, running: 0 }
+    return { total: 0, passed: 0, failed: 0, skipped: 0, notRun: 0, running: 0 }
   }
 
-  const counts = { total: 0, passed: 0, failed: 0, skipped: 0, running: 0 }
+  const counts = { total: 0, passed: 0, failed: 0, skipped: 0, notRun: 0, running: 0 }
   const outputs = props.methodOutputs || {}
 
   const traverse = (item) => {
@@ -115,15 +123,14 @@ const rollupCounts = computed(() => {
     } else {
       const id = item.id
       if (!id) return
+      counts.total++
       const rec = findNodeRecord(outputs, id)
-      if (rec?.outcome) {
-        const out = rec.outcome.toLowerCase()
-        if (out === 'passed') counts.passed++
-        else if (out === 'failed' || out === 'error') counts.failed++
-        else if (out === 'skipped') counts.skipped++
-        else if (out === 'running') counts.running++
-        counts.total++
-      }
+      const out = normalizeOutcome(rec?.outcome)
+      if (out === 'passed') counts.passed++
+      else if (out === 'failed' || out === 'error') counts.failed++
+      else if (out === 'skipped') counts.skipped++
+      else if (out === 'running') counts.running++
+      else counts.notRun++
     }
   }
 
@@ -161,9 +168,9 @@ const onChildToggleSelect = (targetNode) => {
         { 'is-selected': isChecked, 'is-running-locked': isRunning },
         nodeOutcome ? 'row-outcome-' + nodeOutcome : '',
         rollupCounts.running > 0 ? 'row-has-running' : '',
-        rollupCounts.running === 0 && !isOpen && rollupCounts.failed > 0 ? 'row-has-failed' : '',
-        rollupCounts.running === 0 && !isOpen && rollupCounts.failed === 0 && rollupCounts.passed > 0 ? 'row-has-passed' : '',
-        rollupCounts.running === 0 && !isOpen && rollupCounts.failed === 0 && rollupCounts.passed === 0 && rollupCounts.skipped > 0 ? 'row-has-skipped' : ''
+        rollupCounts.running === 0 && rollupCounts.failed > 0 ? 'row-has-failed' : '',
+        rollupCounts.running === 0 && rollupCounts.failed === 0 && rollupCounts.notRun > 0 ? 'row-has-not-run' : '',
+        rollupCounts.running === 0 && rollupCounts.failed === 0 && rollupCounts.notRun === 0 && rollupCounts.passed > 0 ? 'row-has-passed' : ''
       ]" 
       @click="onRowClick"
       @mouseenter="showTooltip(node, $event)"
@@ -223,26 +230,27 @@ const onChildToggleSelect = (targetNode) => {
         {{ nodeOutcome === 'passed' ? '✓' : (nodeOutcome === 'failed' || nodeOutcome === 'error' ? '✗' : '–') }}
       </span>
 
-      <!-- Rollup badges when folder/file is collapsed or has running children -->
+      <!-- Rollup badges on parent nodes (directories, files, and classes) whether expanded or collapsed -->
       <div 
-        v-if="rollupCounts.running > 0 || (!isOpen && rollupCounts.total > 0)" 
+        v-if="rollupCounts.total > 0" 
         class="node-rollup"
-        :title="`${rollupCounts.running ? rollupCounts.running + ' running, ' : ''}${rollupCounts.passed} passed, ${rollupCounts.failed} failed, ${rollupCounts.skipped} skipped`"
+        :title="`${rollupCounts.running ? rollupCounts.running + ' running, ' : ''}${rollupCounts.passed} passed, ${rollupCounts.failed} failed, ${rollupCounts.skipped} skipped, ${rollupCounts.notRun} not-run`"
       >
         <span v-if="rollupCounts.running > 0" class="rollup-chip running">
           {{ rollupCounts.running }} ⏳
         </span>
-        <template v-if="!isOpen || rollupCounts.running > 0">
-          <span v-if="rollupCounts.failed > 0" class="rollup-chip failed">
-            {{ rollupCounts.failed }} ✗
-          </span>
-          <span v-if="rollupCounts.passed > 0" class="rollup-chip passed">
-            {{ rollupCounts.passed }} ✓
-          </span>
-          <span v-if="rollupCounts.skipped > 0" class="rollup-chip skipped">
-            {{ rollupCounts.skipped }} –
-          </span>
-        </template>
+        <span v-if="rollupCounts.failed > 0" class="rollup-chip failed">
+          {{ rollupCounts.failed }} ✗
+        </span>
+        <span v-if="rollupCounts.passed > 0" class="rollup-chip passed">
+          {{ rollupCounts.passed }} ✓
+        </span>
+        <span v-if="rollupCounts.skipped > 0" class="rollup-chip skipped">
+          {{ rollupCounts.skipped }} –
+        </span>
+        <span v-if="rollupCounts.notRun > 0" class="rollup-chip not-run">
+          {{ rollupCounts.notRun }} ○
+        </span>
       </div>
     </div>
 
@@ -283,9 +291,6 @@ const onChildToggleSelect = (targetNode) => {
 .node-row:hover {
   background: rgba(255, 255, 255, 0.08);
 }
-.node-row.is-selected {
-  background: rgba(56, 189, 248, 0.15);
-}
 
 /* Left-edge status stripe */
 .node-row.row-outcome-passed,
@@ -301,10 +306,18 @@ const onChildToggleSelect = (targetNode) => {
   background: rgba(248, 113, 113, 0.06);
 }
 
-.node-row.row-outcome-skipped,
-.node-row.row-has-skipped {
+.node-row.row-outcome-skipped {
   border-left-color: var(--accent-yellow);
   background: rgba(251, 191, 36, 0.04);
+}
+
+.node-row.row-has-not-run {
+  border-left-color: var(--text-muted);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.node-row.is-selected {
+  background: rgba(56, 189, 248, 0.15);
 }
 
 .node-row.row-outcome-running,
@@ -459,6 +472,12 @@ const onChildToggleSelect = (targetNode) => {
   background: rgba(251, 191, 36, 0.15);
   color: var(--accent-yellow);
   border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.rollup-chip.not-run {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.35);
 }
 
 .rollup-chip.running {

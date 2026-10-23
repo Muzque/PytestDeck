@@ -229,7 +229,13 @@ class MethodOutputCollector:
 
         for t in tests:
             nid = t.get("nodeid", "")
-            outcome = t.get("outcome", "unknown")
+            raw_outcome = t.get("outcome", "unknown")
+            if raw_outcome == "xfailed":
+                outcome = "skipped"
+            elif raw_outcome == "xpassed":
+                outcome = "passed"
+            else:
+                outcome = raw_outcome
 
             # Sum execution duration across setup, call, and teardown stages
             total_dur = 0.0
