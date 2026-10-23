@@ -1,9 +1,13 @@
 import os
 import subprocess
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 
 from domain.services import resolve_target_path
+
+PROTECTED_BRANCHES: frozenset[str] = frozenset({"main", "master", "develop", ""})
+
 
 
 def get_pytestdeck_root() -> Path:
@@ -127,4 +131,110 @@ def get_target_git_branch(target_path: str | Path | None = None) -> str:
         pass
 
     return ""
+
+
+def get_prunable_git_branches(
+    target_path: str | Path | None,
+    stored_branches: Iterable[str],
+) -> list[str]:
+    """Determines which stored branch names in the target repository are safe to prune.
+
+    A stored branch is prunable if:
+    - The target repository is a valid Git repository (current_branch != ""), AND
+    - The branch is NOT the currently active branch and NOT a protected trunk branch
+      ('main', 'master', 'develop', ''), AND
+    - Either the branch no longer exists in local `refs/heads/` OR it is already
+      merged into HEAD or a local trunk branch (`git branch --merged`).
+    """
+    current_branch = get_target_git_branch(target_path)
+    if not current_branch:
+        return []
+
+    try:
+        raw = str(target_path).strip()
+        candidate = Path(raw)
+        if candidate.is_absolute() and candidate.exists():
+            target_dir = candidate.resolve()
+        else:
+            target_dir = resolve_target_path(raw)
+    except Exception:
+        return []
+
+    if not target_dir.exists() or not target_dir.is_dir():
+        return []
+
+    env = dict(os.environ)
+    tmp_root = Path(tempfile.gettempdir()).resolve()
+    try:
+        if target_dir.is_relative_to(tmp_root):
+            env["GIT_CEILING_DIRECTORIES"] = str(target_dir.parent)
+    except Exception:
+        pass
+
+    local_branches: set[str] = set()
+    merged_branches: set[str] = set()
+
+    try:
+        refs_res = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(target_dir),
+                "for-each-ref",
+                "--format=%(refname:short)",
+                "refs/heads/",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            env=env,
+            check=False,
+        )
+        if refs_res.returncode != 0:
+            return []
+        local_branches = {
+            line.strip() for line in refs_res.stdout.splitlines() if line.strip()
+        }
+
+        merge_targets = ["HEAD"] + [
+            trunk for trunk in ("main", "master", "develop") if trunk in local_branches
+        ]
+        for ref_target in dict.fromkeys(merge_targets):
+            merged_res = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(target_dir),
+                    "branch",
+                    "--merged",
+                    ref_target,
+                    "--format=%(refname:short)",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+                env=env,
+                check=False,
+            )
+            if merged_res.returncode == 0:
+                for line in merged_res.stdout.splitlines():
+                    b_name = line.strip()
+                    if b_name:
+                        merged_branches.add(b_name)
+    except Exception:
+        return []
+
+    prunable: list[str] = []
+    seen: set[str] = set()
+    for branch in stored_branches:
+        if not branch or branch in seen:
+            continue
+        seen.add(branch)
+        if branch == current_branch or branch in PROTECTED_BRANCHES:
+            continue
+        if branch not in local_branches or branch in merged_branches:
+            prunable.append(branch)
+
+    return sorted(prunable)
+
 

@@ -187,3 +187,71 @@ def test_api_history_branch_switching(client, tmp_path):
     assert resp_main_again.json()["branch"] == "main"
     assert resp_main_again.json()["runs"]["test_service.py::test_ping"]["outcome"] == "passed"
 
+
+def test_api_prune_branches_endpoint(client, tmp_path):
+    import subprocess
+
+    target_repo = tmp_path / "git_prune_api"
+    target_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=target_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=target_repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=target_repo, check=True)
+
+    test_file = target_repo / "test_service.py"
+    test_file.write_text("def test_ping(): pass\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=target_repo, check=True, capture_output=True)
+
+    db = HistoryDatabase(target_path=target_repo)
+    db.save_run("test_service.py::test_ping", outcome="passed", output="main", branch="main")
+
+    # Create and merge feat/a
+    subprocess.run(["git", "checkout", "-b", "feat/a"], cwd=target_repo, check=True, capture_output=True)
+    (target_repo / "a.txt").write_text("a\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "feat a"], cwd=target_repo, check=True, capture_output=True)
+    db.save_run("test_service.py::test_ping", outcome="passed", output="feat/a", branch="feat/a")
+
+    # Create unmerged branch feat/unmerged
+    subprocess.run(["git", "checkout", "-b", "feat/unmerged", "main"], cwd=target_repo, check=True, capture_output=True)
+    (target_repo / "u.txt").write_text("u\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=target_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "feat unmerged"], cwd=target_repo, check=True, capture_output=True)
+    db.save_run("test_service.py::test_ping", outcome="failed", output="feat/unmerged", branch="feat/unmerged")
+
+    # Seed deleted branch
+    db.save_run("test_service.py::test_ping", outcome="passed", output="feat/gone", branch="feat/gone")
+
+    # Merge feat/a into main
+    subprocess.run(["git", "checkout", "main"], cwd=target_repo, check=True, capture_output=True)
+    subprocess.run(["git", "merge", "--no-ff", "feat/a", "-m", "merge feat/a"], cwd=target_repo, check=True, capture_output=True)
+
+    resp = client.post(
+        "/api/test-runs/prune-branches",
+        json={"target_path": str(target_repo)},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["success"] is True
+    assert set(payload["branches"]) == {"feat/a", "feat/gone"}
+    assert payload["deleted_count"] == 2
+
+    # Verify main and feat/unmerged remain in DB while feat/a and feat/gone are deleted
+    assert db.get_run("test_service.py::test_ping", branch="main") is not None
+    assert db.get_run("test_service.py::test_ping", branch="feat/unmerged") is not None
+    assert db.get_run("test_service.py::test_ping", branch="feat/a") is None
+    assert db.get_run("test_service.py::test_ping", branch="feat/gone") is None
+
+    # Non-git repo should return 0 pruned and not error
+    non_git = tmp_path / "plain_dir"
+    non_git.mkdir()
+    db.save_run("test_service.py::test_ping", outcome="passed", output="plain", branch="")
+    resp_plain = client.post(
+        "/api/test-runs/prune-branches",
+        json={"target_path": str(non_git)},
+    )
+    assert resp_plain.status_code == 200
+    assert resp_plain.json() == {"success": True, "branches": [], "deleted_count": 0}
+    assert db.get_run("test_service.py::test_ping", branch="") is not None
+
+

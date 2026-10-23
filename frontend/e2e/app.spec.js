@@ -979,6 +979,120 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
       fs.rmSync(dotGitDir, { recursive: true, force: true })
     }
   })
+
+  test('should prune test results for merged and deleted git branches from Run Options while preserving active and unmerged branches', async ({ page }) => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const { execFileSync } = await import('node:child_process')
+
+    const sampleRepoDir = path.resolve(process.cwd(), '../sample-target-repo')
+    const dotGitDir = path.join(sampleRepoDir, '.git')
+    fs.rmSync(dotGitDir, { recursive: true, force: true })
+
+    try {
+      // Initialize isolated git repository inside sample-target-repo on main
+      execFileSync('git', ['init', '-b', 'main'], { cwd: sampleRepoDir })
+      execFileSync('git', ['config', 'user.email', 'e2e@pytestdeck.local'], { cwd: sampleRepoDir })
+      execFileSync('git', ['config', 'user.name', 'PytestDeck E2E'], { cwd: sampleRepoDir })
+      execFileSync('git', ['commit', '--allow-empty', '-m', 'init main'], { cwd: sampleRepoDir })
+
+      await page.goto('/?target_path=./sample-target-repo')
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+      // Clear all history first
+      await page.click('#btn-run-options')
+      await page.click('#btn-clear-history')
+      await expect(page.locator('.ro-history-cleared-msg')).toBeVisible()
+      await page.click('.ro-close')
+
+      const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+      await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+
+      // 1. Run test_calculator.py on main -> passed
+      await calcFileRow.locator('.node-checkbox').click()
+      await page.locator('.btn-primary').click()
+      const stopBtn = page.locator('.btn-danger')
+      await expect(stopBtn).toBeVisible({ timeout: 5000 })
+      await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+
+      // 2. Create feat/a with a commit and run test_calculator.py -> passed
+      execFileSync('git', ['checkout', '-b', 'feat/a'], { cwd: sampleRepoDir })
+      execFileSync('git', ['commit', '--allow-empty', '-m', 'feat/a commit'], { cwd: sampleRepoDir })
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+      await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+
+      await page.locator('.btn-primary').click()
+      await expect(stopBtn).toBeVisible({ timeout: 5000 })
+      await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+
+      // 3. Create feat/unmerged from main with an unmerged commit and run test_calculator.py -> passed
+      execFileSync('git', ['checkout', '-b', 'feat/unmerged', 'main'], { cwd: sampleRepoDir })
+      execFileSync('git', ['commit', '--allow-empty', '-m', 'feat/unmerged commit'], { cwd: sampleRepoDir })
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+      await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+
+      await page.locator('.btn-primary').click()
+      await expect(stopBtn).toBeVisible({ timeout: 5000 })
+      await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+
+      // 4. Click Prune Merged/Deleted Branches while on feat/unmerged -> neither feat/unmerged nor main nor feat/a is deleted
+      await page.click('#btn-run-options')
+      await page.click('#btn-prune-branches')
+      await expect(page.locator('.ro-branches-pruned-msg')).toBeVisible()
+      await page.click('.ro-close')
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+
+      // 5. Switch back to main and merge feat/a into main
+      execFileSync('git', ['checkout', 'main'], { cwd: sampleRepoDir })
+      execFileSync('git', ['merge', '--no-ff', 'feat/a', '-m', 'merge feat/a'], { cwd: sampleRepoDir })
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+
+      // Verify localStorage currently has feat/a before pruning
+      const hasFeatABefore = await page.evaluate(() => {
+        const raw = localStorage.getItem('pytestdeck_method_outputs_by_branch')
+        if (!raw) return false
+        const parsed = JSON.parse(raw)
+        return Object.keys(parsed).some(k => k.endsWith('::feat/a'))
+      })
+      expect(hasFeatABefore).toBe(true)
+
+      // 6. Open Run Options and click Prune Merged/Deleted Branches
+      await page.click('#btn-run-options')
+      await page.click('#btn-prune-branches')
+      await expect(page.locator('.ro-branches-pruned-msg')).toBeVisible()
+      await page.click('.ro-close')
+
+      // Verify feat/a was removed from localStorage while main and feat/unmerged remain
+      const storageAfter = await page.evaluate(() => {
+        const raw = localStorage.getItem('pytestdeck_method_outputs_by_branch')
+        return raw ? Object.keys(JSON.parse(raw)) : []
+      })
+      expect(storageAfter.some(k => k.endsWith('::feat/a'))).toBe(false)
+      expect(storageAfter.some(k => k.endsWith('::main'))).toBe(true)
+      expect(storageAfter.some(k => k.endsWith('::feat/unmerged'))).toBe(true)
+
+      // Active branch (main) still shows passed
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+
+      // 7. Checkout feat/a -> its results were pruned from history.db so it shows not-run
+      execFileSync('git', ['checkout', 'feat/a'], { cwd: sampleRepoDir })
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+      await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+      await expect(calcFileRow).not.toHaveClass(/row-has-passed/)
+
+      // 8. Checkout feat/unmerged -> its results are still preserved
+      execFileSync('git', ['checkout', 'feat/unmerged'], { cwd: sampleRepoDir })
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+    } finally {
+      fs.rmSync(dotGitDir, { recursive: true, force: true })
+    }
+  })
 })
+
 
 

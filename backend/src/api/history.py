@@ -18,6 +18,11 @@ class PruneRunsRequest(BaseModel):
     valid_nodes: list[str] = []
 
 
+class PruneBranchesRequest(BaseModel):
+    target_path: str = ""
+
+
+
 @router.get("")
 async def get_test_runs(
     response: Response,
@@ -79,6 +84,29 @@ async def prune_orphaned_runs(req: PruneRunsRequest):
         return {"success": True, "pruned_count": pruned_count}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/prune-branches")
+async def prune_merged_and_deleted_branches(req: PruneBranchesRequest):
+    try:
+        db = HistoryDatabase(target_path=req.target_path)
+        resolved_target: Any = req.target_path
+        try:
+            from domain.services import resolve_target_path
+
+            if req.target_path:
+                resolved_target = resolve_target_path(req.target_path)
+        except Exception:
+            pass
+        result = db.prune_branches(target_path=resolved_target)
+        return {
+            "success": True,
+            "branches": result["branches"],
+            "deleted_count": result["deleted_count"],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 
 run_options_router = APIRouter(prefix="/api/run-options", tags=["history"])

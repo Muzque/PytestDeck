@@ -132,6 +132,34 @@ export function useTestRunner() {
     }
   }
 
+  const removeBranchesFromCache = (path, branches) => {
+    if (!Array.isArray(branches) || branches.length === 0) return
+    try {
+      const raw = localStorage.getItem(BRANCH_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object') return
+      const branchSet = new Set(branches)
+      for (const b of branches) {
+        delete parsed[getBranchStorageKey(path, b)]
+      }
+      for (const key of Object.keys(parsed)) {
+        const sepIdx = key.lastIndexOf('::')
+        if (sepIdx !== -1) {
+          const keyBranch = key.slice(sepIdx + 2)
+          const keyPath = key.slice(0, sepIdx)
+          if (branchSet.has(keyBranch) && (!path || !keyPath || keyPath === path)) {
+            delete parsed[key]
+          }
+        }
+      }
+      localStorage.setItem(BRANCH_STORAGE_KEY, JSON.stringify(parsed))
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+
   // Clean up legacy un-scoped localStorage key so another branch's colors never flash on initial load
   try {
     localStorage.removeItem('pytestdeck_method_outputs')
@@ -244,6 +272,35 @@ export function useTestRunner() {
       selectedTestDetail.value.modified_since_run = false
     }
   }
+
+  const pruneMergedAndDeletedBranches = async (onDone) => {
+    let result = { branches: [], deleted_count: 0 }
+    try {
+      const res = await fetch('/api/test-runs/prune-branches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPath.value || ''
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const prunedBranches = data.branches || []
+        removeBranchesFromCache(targetPath.value || '', prunedBranches)
+        result = {
+          branches: prunedBranches,
+          deleted_count: data.deleted_count || 0
+        }
+      }
+    } catch (e) {
+      console.error('Failed to prune merged/deleted branches from server', e)
+    }
+    if (typeof onDone === 'function') {
+      onDone(result)
+    }
+    return result
+  }
+
 
   const getMethodOutput = (nodeId) => {
     if (!nodeId) return null
@@ -1065,7 +1122,9 @@ export function useTestRunner() {
     getMethodOutput,
     clearMethodOutput,
     clearAllMethodOutputs,
+    pruneMergedAndDeletedBranches,
     fetchConfig
+
   }
 }
 
