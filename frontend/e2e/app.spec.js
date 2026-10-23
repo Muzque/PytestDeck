@@ -84,6 +84,8 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.click('button:has-text("Execution History")')
     await expect(page.locator('.history-item')).toHaveCount(1)
     await expect(page.locator('.history-status')).toBeVisible()
+    await expect(page.locator('.history-item .history-duration')).toBeVisible()
+    await expect(page.locator('.history-item .history-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
   })
 
   test('should display raw JSON report tab after execution', async ({ page }) => {
@@ -680,5 +682,57 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     expect(fullOutputCopied.length).toBeGreaterThan(ctrlCCopied.length)
     expect(fullOutputCopied).toContain('test_calculator.py')
     expect(fullOutputCopied).toContain('passed')
+  })
+
+  test('should show run duration for each Execution History row across pytest and behave runs', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // 1. Run test_calculator.py in Unit Tests (pytest)
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Read summary.report.duration from JSON Report tab and compute expected formatted string
+    await page.click('button:has-text("JSON Report")')
+    const jsonText = await page.locator('.json-code').innerText()
+    const parsedReport = JSON.parse(jsonText)
+    const reportDuration = Number(parsedReport.duration)
+    const expectedPytestDuration =
+      reportDuration < 0.001
+        ? '<1ms'
+        : reportDuration < 1.0
+          ? `${Math.round(reportDuration * 1000)}ms`
+          : `${reportDuration.toFixed(2)}s`
+
+    // Verify Execution History row shows the exact formatted duration from summary.report.duration
+    await page.click('button:has-text("Execution History")')
+    const historyItems = page.locator('.history-item')
+    await expect(historyItems).toHaveCount(1)
+    await expect(historyItems.nth(0).locator('.history-duration')).toHaveText(expectedPytestDuration)
+
+    // 2. Switch to Acceptance Tests (behave) and run calculator.feature
+    const suiteSelect = page.locator('.suite-select')
+    await suiteSelect.selectOption({ index: 2 })
+    const featureRow = page.locator('.node-row:has-text("calculator.feature")')
+    await expect(featureRow).toBeVisible({ timeout: 15000 })
+    await featureRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Switch back to Execution History and verify:
+    // - Both history rows are present
+    // - Newest row (index 0, behave) displays its formatted duration parsed from Took Xmin Y.ZZZs
+    // - Earlier row (index 1, pytest) still preserves its original expectedPytestDuration
+    await page.click('button:has-text("Execution History")')
+    await expect(historyItems).toHaveCount(2)
+    await expect(historyItems.nth(0).locator('.history-duration')).toBeVisible()
+    await expect(historyItems.nth(0).locator('.history-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
+    await expect(historyItems.nth(1).locator('.history-duration')).toHaveText(expectedPytestDuration)
   })
 })

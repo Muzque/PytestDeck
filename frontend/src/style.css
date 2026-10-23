@@ -851,6 +851,17 @@ select {
   color: var(--text-muted);
 }
 
+.history-duration {
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 2px 7px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  letter-spacing: 0.02em;
+}
+
 .history-status {
   font-size: 0.75rem;
   font-weight: 700;
