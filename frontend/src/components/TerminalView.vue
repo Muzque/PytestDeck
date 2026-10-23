@@ -102,6 +102,14 @@ const resetAndWriteAll = (allLogs) => {
   term.scrollToBottom()
 }
 
+const isCopyShortcut = (event) => {
+  const isCKey = event.key === 'c' || event.key === 'C' || event.code === 'KeyC'
+  if (!isCKey || event.altKey) return false
+  const isCtrlCopy = event.ctrlKey && !event.metaKey
+  const isCmdCopy = event.metaKey && !event.ctrlKey && !event.shiftKey
+  return isCtrlCopy || isCmdCopy
+}
+
 onMounted(() => {
   const initialTheme = TERMINAL_THEMES[currentTerminalTheme.value] || TERMINAL_THEMES['apple-dark']
   const initialFont = terminalFonts.find(f => f.id === currentTerminalFont.value) || terminalFonts[0]
@@ -115,6 +123,17 @@ onMounted(() => {
     convertEol: true,
     cursorBlink: true,
     scrollback: 50000
+  })
+
+  term.attachCustomKeyEventHandler((event) => {
+    if (!isCopyShortcut(event)) return true
+    if (event.type === 'keydown' && term && term.hasSelection()) {
+      const selectedText = term.getSelection()
+      if (selectedText && navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(selectedText).catch(() => {})
+      }
+    }
+    return false
   })
 
   fitAddon = new FitAddon()
