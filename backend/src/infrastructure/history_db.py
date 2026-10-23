@@ -4,7 +4,11 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from infrastructure.storage_service import get_target_git_branch, get_target_storage_dir
+from infrastructure.storage_service import (
+    get_prunable_git_branches,
+    get_target_git_branch,
+    get_target_storage_dir,
+)
 
 
 class HistoryDatabase:
@@ -382,6 +386,51 @@ class HistoryDatabase:
             )
             conn.commit()
             return del_cur.rowcount
+
+    def get_stored_branches(self) -> list[str]:
+        """Returns a sorted list of distinct non-empty branch names stored in test_runs."""
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT DISTINCT branch FROM test_runs WHERE branch != '' ORDER BY branch ASC"
+            )
+            return [row["branch"] for row in cur.fetchall() if row["branch"]]
+
+    def prune_branches(
+        self,
+        target_path: str | Path | None = None,
+        branches: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Deletes test run records belonging to merged or deleted local git branches.
+
+        Protects the active branch, trunk branches ('main', 'master', 'develop'),
+        and non-git runs (''). Returns the list of pruned branch names and deleted row count.
+        """
+        effective_target = target_path if target_path is not None else self.target_path
+        if branches is None:
+            stored_branches = self.get_stored_branches()
+            if not stored_branches:
+                return {"branches": [], "deleted_count": 0}
+            target_branches = get_prunable_git_branches(
+                effective_target, stored_branches
+            )
+        else:
+            target_branches = sorted({b for b in branches if b})
+
+        if not target_branches:
+            return {"branches": [], "deleted_count": 0}
+
+        placeholders = ",".join(["?"] * len(target_branches))
+        with self._get_connection() as conn:
+            del_cur = conn.execute(
+                f"DELETE FROM test_runs WHERE branch IN ({placeholders})",
+                target_branches,
+            )
+            conn.commit()
+            return {
+                "branches": target_branches,
+                "deleted_count": del_cur.rowcount,
+            }
+
 
     def save_run_options(self, marker_filter: str = "", extra_args: str = "") -> None:
         """Saves run options (marker filter and extra args) to the database."""

@@ -243,3 +243,71 @@ def test_history_database_branch_isolation(tmp_path):
     assert run_a["outcome"] == "passed"
     assert run_a["output"] == "passed on branch-a"
 
+
+def test_history_database_prune_branches(tmp_path):
+    import subprocess
+
+    git_repo = tmp_path / "prune_repo"
+    git_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=git_repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=git_repo, check=True)
+
+    test_file = git_repo / "test_calc.py"
+    test_file.write_text("def test_add(): pass\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=git_repo, check=True, capture_output=True)
+
+    db_file = tmp_path / "prune_history.db"
+    db = HistoryDatabase(target_path=git_repo, db_path=db_file)
+
+    # Record run on main
+    db.save_run("test_calc.py::test_add", outcome="passed", output="main out", branch="main")
+
+    # Create feat/a, commit, record run
+    subprocess.run(["git", "checkout", "-b", "feat/a"], cwd=git_repo, check=True, capture_output=True)
+    test_file.write_text("def test_add(): assert 1 == 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "feat a"], cwd=git_repo, check=True, capture_output=True)
+    db.save_run("test_calc.py::test_add", outcome="passed", output="feat/a out", branch="feat/a")
+
+    # Also seed a run for an already deleted branch feat/deleted
+    db.save_run("test_calc.py::test_add", outcome="failed", output="deleted out", branch="feat/deleted")
+
+    # Create feat/unmerged from main with unmerged commit and record run
+    subprocess.run(["git", "checkout", "-b", "feat/unmerged", "main"], cwd=git_repo, check=True, capture_output=True)
+    (git_repo / "unmerged.py").write_text("y = 2\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "unmerged"], cwd=git_repo, check=True, capture_output=True)
+    db.save_run("test_calc.py::test_add", outcome="passed", output="unmerged out", branch="feat/unmerged")
+
+    # Prune while on feat/unmerged (feat/a not merged yet, feat/deleted does not exist)
+    res_unmerged = db.prune_branches()
+    assert res_unmerged["branches"] == ["feat/deleted"]
+    assert res_unmerged["deleted_count"] == 1
+    assert db.get_run("test_calc.py::test_add", branch="feat/unmerged") is not None
+    assert db.get_run("test_calc.py::test_add", branch="main") is not None
+    assert db.get_run("test_calc.py::test_add", branch="feat/a") is not None
+    assert db.get_run("test_calc.py::test_add", branch="feat/deleted") is None
+
+    # Switch to main and merge feat/a (without deleting feat/a ref)
+    subprocess.run(["git", "checkout", "main"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(["git", "merge", "--no-ff", "feat/a", "-m", "merge feat/a"], cwd=git_repo, check=True, capture_output=True)
+
+    res_main = db.prune_branches()
+    assert res_main["branches"] == ["feat/a"]
+    assert res_main["deleted_count"] == 1
+    assert db.get_run("test_calc.py::test_add", branch="feat/a") is None
+    assert db.get_run("test_calc.py::test_add", branch="main") is not None
+    assert db.get_run("test_calc.py::test_add", branch="feat/unmerged") is not None
+
+    # Non-git repo safety check
+    non_git_dir = tmp_path / "non_git_repo"
+    non_git_dir.mkdir()
+    non_git_db = HistoryDatabase(target_path=non_git_dir, db_path=tmp_path / "non_git.db")
+    non_git_db.save_run("test_x.py::test_1", outcome="passed", output="non-git out")
+    res_non_git = non_git_db.prune_branches()
+    assert res_non_git == {"branches": [], "deleted_count": 0}
+    assert non_git_db.get_run("test_x.py::test_1") is not None
+
+

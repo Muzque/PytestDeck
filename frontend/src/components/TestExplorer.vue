@@ -23,8 +23,10 @@ const emit = defineEmits([
   'discover',
   'run',
   'stop',
-  'clear-all-history'
+  'clear-all-history',
+  'prune-branches'
 ])
+
 
 const showRunOptions = ref(false)
 
@@ -149,7 +151,9 @@ const activeOptionCount = computed(() =>
       @update:markerFilter="emit('update:markerFilter', $event)"
       @update:extraArgs="emit('update:extraArgs', $event)"
       @clear-all-history="emit('clear-all-history')"
+      @prune-branches="emit('prune-branches', $event)"
       @close="showRunOptions = false"
     />
+
   </div>
 </template>

@@ -43,8 +43,10 @@ const {
   runSingleMethod,
   clearMethodOutput,
   clearAllMethodOutputs,
+  pruneMergedAndDeletedBranches,
   methodOutputs
 } = useTestRunner()
+
 
 import { useSidebarResize } from './composables/useSidebarResize'
 
@@ -81,7 +83,9 @@ const { activeTooltip } = useTooltip()
         @run="runTests"
         @stop="stopTests"
         @clear-all-history="clearAllMethodOutputs"
+        @prune-branches="pruneMergedAndDeletedBranches"
       />
+
 
       <!-- Drag handle to adjust sidebar width -->
       <div 

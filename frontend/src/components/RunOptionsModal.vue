@@ -7,19 +7,29 @@ const props = defineProps({
   extraArgs: { type: String, default: '' }
 })
 
-const emit = defineEmits(['close', 'update:markerFilter', 'update:extraArgs', 'clear-all-history'])
+const emit = defineEmits([
+  'close',
+  'update:markerFilter',
+  'update:extraArgs',
+  'clear-all-history',
+  'prune-branches'
+])
 
 // Local drafts so Cancel discards edits
 const draftMarker = ref('')
 const draftExtra = ref('')
 const markerInputRef = ref(null)
 const historyClearedNotice = ref(false)
+const branchesPrunedNotice = ref(false)
+const branchesPrunedMessage = ref('')
 
 watch(() => props.show, async (visible) => {
   if (visible) {
     draftMarker.value = props.markerFilter
     draftExtra.value = props.extraArgs
     historyClearedNotice.value = false
+    branchesPrunedNotice.value = false
+    branchesPrunedMessage.value = ''
     await nextTick()
     markerInputRef.value?.focus()
   }
@@ -38,11 +48,32 @@ const clearAll = () => {
 
 const handleClearHistory = () => {
   emit('clear-all-history')
+  branchesPrunedNotice.value = false
   historyClearedNotice.value = true
   setTimeout(() => {
     historyClearedNotice.value = false
   }, 2500)
 }
+
+const handlePruneBranches = () => {
+  historyClearedNotice.value = false
+  let handled = false
+  const showNotice = (res) => {
+    if (handled) return
+    handled = true
+    const count = res?.branches?.length || 0
+    branchesPrunedMessage.value =
+      count > 0
+        ? `✓ Pruned ${count} branch${count > 1 ? 'es' : ''}`
+        : '✓ No merged/deleted branches to prune'
+    branchesPrunedNotice.value = true
+    setTimeout(() => {
+      branchesPrunedNotice.value = false
+    }, 2500)
+  }
+  emit('prune-branches', showNotice)
+}
+
 
 const onKeydown = (e) => {
   if (!props.show) return
@@ -97,20 +128,33 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
             <div class="ro-danger-header">
               <span class="ro-danger-badge">⚠️ Danger Zone</span>
               <span v-if="historyClearedNotice" class="ro-history-cleared-msg">✓ Test history cleared</span>
+              <span v-else-if="branchesPrunedNotice" class="ro-branches-pruned-msg">{{ branchesPrunedMessage }}</span>
             </div>
             <p class="ro-danger-warning">
               Clearing test history permanently removes all stored test outcomes, run durations, and cached terminal reports from the database.
             </p>
-            <button
-              id="btn-clear-history"
-              type="button"
-              class="btn btn-danger ro-clear-history-btn"
-              title="Clear all test history from database"
-              @click="handleClearHistory"
-            >
-              <span>🗑️ Clear Test History</span>
-            </button>
+            <div class="ro-danger-actions">
+              <button
+                id="btn-prune-branches"
+                type="button"
+                class="btn btn-secondary ro-prune-branches-btn"
+                title="Remove test results for merged and deleted git branches"
+                @click="handlePruneBranches"
+              >
+                <span>🌿 Prune Merged/Deleted Branches</span>
+              </button>
+              <button
+                id="btn-clear-history"
+                type="button"
+                class="btn btn-danger ro-clear-history-btn"
+                title="Clear all test history from database"
+                @click="handleClearHistory"
+              >
+                <span>🗑️ Clear Test History</span>
+              </button>
+            </div>
           </div>
+
 
           <div class="ro-footer">
             <button type="button" class="btn btn-secondary ro-clear" @click="clearAll">Clear</button>
@@ -274,7 +318,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   letter-spacing: 0.02em;
 }
 
-.ro-history-cleared-msg {
+.ro-history-cleared-msg,
+.ro-branches-pruned-msg {
   font-size: 0.75rem;
   font-weight: 600;
   color: #10b981;
@@ -286,6 +331,23 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
   line-height: 1.45;
   color: var(--text-muted);
 }
+
+.ro-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ro-prune-branches-btn {
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
 
 .ro-clear-history-btn {
   align-self: flex-start;
