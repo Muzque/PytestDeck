@@ -128,3 +128,62 @@ def test_api_run_options_endpoints(client):
     data = get_resp.json()
     assert data["marker_filter"] == "unit and not slow"
     assert data["extra_args"] == "-s --tb=short"
+
+
+def test_api_history_branch_switching(client, tmp_path):
+    import subprocess
+
+    from infrastructure.test_detail_service import compute_file_hash
+
+    target_repo = tmp_path / "git_project"
+    target_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=target_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=target_repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=target_repo, check=True)
+
+    test_file = target_repo / "test_service.py"
+    test_file.write_text("def test_ping(): pass\n", encoding="utf-8")
+    f_hash = compute_file_hash(test_file)
+    subprocess.run(["git", "add", "."], cwd=target_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=target_repo, check=True, capture_output=True)
+
+    db = HistoryDatabase(target_path=target_repo)
+    db.save_run(
+        "test_service.py::test_ping",
+        outcome="passed",
+        duration=0.03,
+        output="ok on main",
+        file_hash=f_hash,
+    )
+
+    resp_main = client.get(f"/api/test-runs?target_path={target_repo}&include_branch=1")
+    assert resp_main.status_code == 200
+    assert resp_main.json()["branch"] == "main"
+    assert resp_main.json()["runs"]["test_service.py::test_ping"]["outcome"] == "passed"
+
+    # Switch to feature-x where test_service.py is identical
+    subprocess.run(["git", "checkout", "-b", "feature-x"], cwd=target_repo, check=True, capture_output=True)
+
+    resp_feat = client.get(f"/api/test-runs?target_path={target_repo}&include_branch=1")
+    assert resp_feat.status_code == 200
+    assert resp_feat.json()["branch"] == "feature-x"
+    assert resp_feat.json()["runs"] == {}
+
+    # Prune and delete on feature-x should not affect main
+    client.post(
+        "/api/test-runs/prune",
+        json={"target_path": str(target_repo), "valid_nodes": ["other.py::test_x"]},
+    )
+    client.request(
+        "DELETE",
+        "/api/test-runs",
+        json={"target_path": str(target_repo), "node_id": "test_service.py::test_ping"},
+    )
+
+    # Switch back to main and verify main's passed run is still intact
+    subprocess.run(["git", "checkout", "main"], cwd=target_repo, check=True, capture_output=True)
+    resp_main_again = client.get(f"/api/test-runs?target_path={target_repo}&include_branch=1")
+    assert resp_main_again.status_code == 200
+    assert resp_main_again.json()["branch"] == "main"
+    assert resp_main_again.json()["runs"]["test_service.py::test_ping"]["outcome"] == "passed"
+

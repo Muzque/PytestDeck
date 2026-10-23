@@ -73,11 +73,7 @@ export function useTestRunner() {
           const updated = { ...methodOutputs.value }
           delete updated[nodeId]
           methodOutputs.value = updated
-          try {
-            localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
-          } catch {
-            // Ignore storage errors
-          }
+          writeBranchCache(targetPath.value, currentBranch.value, methodOutputs.value)
         }
       } else {
         selectedTestDetail.value = null
@@ -91,30 +87,83 @@ export function useTestRunner() {
   }
 
   const methodOutputs = ref({})
+  const currentBranch = ref(null)
   const liveMethodRun = ref(null)
+  const BRANCH_STORAGE_KEY = 'pytestdeck_method_outputs_by_branch'
 
-  try {
-    const saved = localStorage.getItem('pytestdeck_method_outputs')
-    if (saved) {
-      methodOutputs.value = JSON.parse(saved)
+  const getBranchStorageKey = (path, branch) => {
+    return `${path || ''}::${branch ?? ''}`
+  }
+
+  const readBranchCache = (path, branch) => {
+    if (branch === null || branch === undefined) return null
+    try {
+      const raw = localStorage.getItem(BRANCH_STORAGE_KEY)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      const key = getBranchStorageKey(path, branch)
+      return parsed && typeof parsed === 'object' && parsed[key] ? parsed[key] : null
+    } catch {
+      return null
     }
-  } catch (e) {
-    console.error('Failed to parse cached method outputs', e)
+  }
+
+  const writeBranchCache = (path, branch, outputs) => {
+    if (branch === null || branch === undefined) return
+    try {
+      const raw = localStorage.getItem(BRANCH_STORAGE_KEY)
+      const parsed = raw ? JSON.parse(raw) : {}
+      const next = parsed && typeof parsed === 'object' ? parsed : {}
+      const key = getBranchStorageKey(path, branch)
+      next[key] = outputs || {}
+      localStorage.setItem(BRANCH_STORAGE_KEY, JSON.stringify(next))
+      localStorage.removeItem('pytestdeck_method_outputs')
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  const clearAllBranchCache = () => {
+    try {
+      localStorage.removeItem(BRANCH_STORAGE_KEY)
+      localStorage.removeItem('pytestdeck_method_outputs')
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  // Clean up legacy un-scoped localStorage key so another branch's colors never flash on initial load
+  try {
+    localStorage.removeItem('pytestdeck_method_outputs')
+  } catch {
+    // Ignore storage errors
   }
 
   const loadStoredMethodOutputs = async () => {
     if (isRunning.value) return
+    const reqPath = targetPath.value || ''
     try {
-      const url = targetPath.value ? `/api/test-runs?target_path=${encodeURIComponent(targetPath.value)}` : '/api/test-runs'
+      const url = reqPath
+        ? `/api/test-runs?target_path=${encodeURIComponent(reqPath)}&include_branch=1`
+        : '/api/test-runs?include_branch=1'
       const res = await fetch(url)
       if (res.ok && !isRunning.value) {
         const data = await res.json()
         if (isRunning.value) return
+        const headerBranch = res.headers?.get?.('X-Git-Branch')
+        const resolvedBranch =
+          data.branch !== undefined
+            ? data.branch
+            : headerBranch !== null && headerBranch !== undefined
+              ? headerBranch
+              : (currentBranch.value ?? '')
+        const branchChanged =
+          currentBranch.value !== null && currentBranch.value !== resolvedBranch
+        currentBranch.value = resolvedBranch
         methodOutputs.value = data.runs || {}
-        try {
-          localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
-        } catch {
-          // Ignore storage errors
+        writeBranchCache(reqPath, resolvedBranch, methodOutputs.value)
+        if (branchChanged && isDetailSuite.value && singleSelectedNode.value) {
+          fetchTestDetail(singleSelectedNode.value.id)
         }
       }
     } catch (e) {
@@ -128,9 +177,18 @@ export function useTestRunner() {
     window.addEventListener('focus', () => {
       loadStoredMethodOutputs()
     })
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          loadStoredMethodOutputs()
+        }
+      })
+    }
   }
 
   watch(targetPath, () => {
+    currentBranch.value = null
+    methodOutputs.value = {}
     loadStoredMethodOutputs()
     loadStoredRunOptions()
   })
@@ -158,11 +216,7 @@ export function useTestRunner() {
       }
     }
     methodOutputs.value = updated
-    try {
-      localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
-    } catch {
-      // Ignore storage errors
-    }
+    writeBranchCache(targetPath.value, currentBranch.value, methodOutputs.value)
 
     // Also update selectedTestDetail if active
     if (selectedTestDetail.value && selectedTestDetail.value.node_id === nodeId) {
@@ -184,11 +238,7 @@ export function useTestRunner() {
       console.error('Failed to clear runs from server', e)
     }
     methodOutputs.value = {}
-    try {
-      localStorage.removeItem('pytestdeck_method_outputs')
-    } catch {
-      // Ignore storage errors
-    }
+    clearAllBranchCache()
     if (selectedTestDetail.value) {
       selectedTestDetail.value.latest_run = null
       selectedTestDetail.value.modified_since_run = false
@@ -565,6 +615,10 @@ export function useTestRunner() {
         throw new Error(errData.detail || `Discovery failed with status ${res.status}`)
       }
       const data = await res.json()
+      if (data.branch !== undefined && currentBranch.value !== data.branch) {
+        currentBranch.value = data.branch
+        methodOutputs.value = readBranchCache(targetPath.value, data.branch) || {}
+      }
       testTree.value = data.tree
 
       if (data.tree) {
@@ -780,12 +834,11 @@ export function useTestRunner() {
                 }
                 baseOutputs[canonicalKey] = mergedVal
               }
-              methodOutputs.value = baseOutputs
-              try {
-                localStorage.setItem('pytestdeck_method_outputs', JSON.stringify(methodOutputs.value))
-              } catch {
-                // Ignore storage limits
+              if (msg.branch !== undefined) {
+                currentBranch.value = msg.branch
               }
+              methodOutputs.value = baseOutputs
+              writeBranchCache(targetPath.value, currentBranch.value ?? '', methodOutputs.value)
             } else {
               methodOutputs.value = baseOutputs
             }
