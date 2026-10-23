@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -68,3 +69,62 @@ def get_target_storage_dir(target_path: str | Path | None = None) -> Path:
         fallback_dir = Path(tempfile.gettempdir()) / "pytestdeck" / repo_name
         fallback_dir.mkdir(parents=True, exist_ok=True)
         return fallback_dir
+
+
+def get_target_git_branch(target_path: str | Path | None = None) -> str:
+    """Returns the current Git branch identifier for the target repository.
+
+    - Named branch: returns branch name (e.g. 'main', 'feat/xyz')
+    - Detached HEAD: returns 'detached:<short-sha>'
+    - Non-git directory or unresolved path: returns ''
+    """
+    if target_path is None or str(target_path).strip() == "":
+        return ""
+    try:
+        raw = str(target_path).strip()
+        candidate = Path(raw)
+        if candidate.is_absolute() and candidate.exists():
+            target_dir = candidate.resolve()
+        else:
+            target_dir = resolve_target_path(raw)
+    except Exception:
+        return ""
+
+    if not target_dir.exists() or not target_dir.is_dir():
+        return ""
+
+    env = dict(os.environ)
+    tmp_root = Path(tempfile.gettempdir()).resolve()
+    try:
+        if target_dir.is_relative_to(tmp_root):
+            env["GIT_CEILING_DIRECTORIES"] = str(target_dir.parent)
+    except Exception:
+        pass
+
+    try:
+        sym = subprocess.run(
+            ["git", "-C", str(target_dir), "symbolic-ref", "--quiet", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            env=env,
+            check=False,
+        )
+        if sym.returncode == 0 and sym.stdout.strip():
+            return sym.stdout.strip()
+
+        rev = subprocess.run(
+            ["git", "-C", str(target_dir), "rev-parse", "--verify", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            env=env,
+            check=False,
+        )
+        if rev.returncode == 0 and rev.stdout.strip():
+            return f"detached:{rev.stdout.strip()}"
+    except Exception:
+        pass
+
+    return ""
+

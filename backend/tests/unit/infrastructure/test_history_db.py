@@ -149,3 +149,97 @@ def test_clean_stale_runs_on_file_modification(tmp_path):
     removed = db.clean_stale_runs(repo_dir)
     assert removed == ["test_example.py::test_one"]
     assert db.get_run("test_example.py::test_one") is None
+
+
+def test_get_target_git_branch_states(tmp_path):
+    import subprocess
+
+    from infrastructure.storage_service import get_target_git_branch
+
+    non_git_dir = tmp_path / "plain_dir"
+    non_git_dir.mkdir()
+    assert get_target_git_branch(non_git_dir) == ""
+
+    git_repo = tmp_path / "git_repo"
+    git_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "branch-a"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=git_repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=git_repo, check=True)
+
+    # Unborn branch still resolves branch name
+    assert get_target_git_branch(git_repo) == "branch-a"
+
+    f = git_repo / "test_sample.py"
+    f.write_text("def test_ok(): pass\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=git_repo, check=True, capture_output=True)
+    assert get_target_git_branch(git_repo) == "branch-a"
+
+    subprocess.run(["git", "checkout", "-b", "branch-b"], cwd=git_repo, check=True, capture_output=True)
+    assert get_target_git_branch(git_repo) == "branch-b"
+
+    subprocess.run(["git", "checkout", "--detach", "HEAD"], cwd=git_repo, check=True, capture_output=True)
+    detached_branch = get_target_git_branch(git_repo)
+    assert detached_branch.startswith("detached:")
+    assert len(detached_branch) > len("detached:")
+
+
+def test_history_database_branch_isolation(tmp_path):
+    import subprocess
+
+    from infrastructure.test_detail_service import compute_file_hash
+
+    git_repo = tmp_path / "branch_repo"
+    git_repo.mkdir()
+    subprocess.run(["git", "init", "-b", "branch-a"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=git_repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=git_repo, check=True)
+
+    test_file = git_repo / "test_calc.py"
+    test_file.write_text("def test_add(): pass\n", encoding="utf-8")
+    file_hash = compute_file_hash(test_file)
+    subprocess.run(["git", "add", "."], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-m", "initial commit"], cwd=git_repo, check=True, capture_output=True)
+
+    db_file = tmp_path / "branch_history.db"
+    db = HistoryDatabase(target_path=git_repo, db_path=db_file)
+
+    # Save passed result on branch-a
+    db.save_run(
+        node_id="test_calc.py::test_add",
+        outcome="passed",
+        duration=0.04,
+        output="passed on branch-a",
+        file_hash=file_hash,
+    )
+    assert db.get_run("test_calc.py::test_add")["outcome"] == "passed"
+    assert "test_calc.py::test_add" in db.get_all_runs()
+
+    # Switch to branch-b with identical test file content
+    subprocess.run(["git", "checkout", "-b", "branch-b"], cwd=git_repo, check=True, capture_output=True)
+
+    # branch-b should NOT see branch-a's run
+    assert db.get_run("test_calc.py::test_add") is None
+    assert db.get_all_runs() == {}
+
+    # prune_orphans and delete_run on branch-b must NOT delete branch-a's record
+    assert db.prune_orphans(["other_file.py::test_other"]) == 0
+    assert db.delete_run("test_calc.py::test_add") is False
+
+    # Save failed result for the same node_id on branch-b
+    db.save_run(
+        node_id="test_calc.py::test_add",
+        outcome="failed",
+        duration=0.09,
+        output="failed on branch-b",
+        file_hash=file_hash,
+    )
+    assert db.get_run("test_calc.py::test_add")["outcome"] == "failed"
+
+    # Switch back to branch-a and verify branch-a still has its passed result
+    subprocess.run(["git", "checkout", "branch-a"], cwd=git_repo, check=True, capture_output=True)
+    run_a = db.get_run("test_calc.py::test_add")
+    assert run_a is not None
+    assert run_a["outcome"] == "passed"
+    assert run_a["output"] == "passed on branch-a"
+

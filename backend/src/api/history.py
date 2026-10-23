@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from infrastructure.history_db import HistoryDatabase
@@ -18,26 +20,40 @@ class PruneRunsRequest(BaseModel):
 
 @router.get("")
 async def get_test_runs(
+    response: Response,
     target_path: str = Query("", description="Target repo path"),
     node_id: str | None = Query(
         None, description="Optional node_id to fetch single run"
     ),
+    include_branch: bool = Query(
+        False, description="Whether to include current git branch in JSON payload"
+    ),
 ):
     try:
         db = HistoryDatabase(target_path=target_path)
+        branch = db.get_current_branch()
         try:
             from domain.services import resolve_target_path
 
             resolved_target = resolve_target_path(target_path)
-            db.clean_stale_runs(resolved_target)
+            if target_path:
+                branch = db.get_current_branch(resolved_target)
+            db.clean_stale_runs(resolved_target, branch=branch)
         except Exception:
             pass
 
+        response.headers["X-Git-Branch"] = branch
         if node_id:
-            run = db.get_run(node_id)
-            return {"run": run}
-        runs = db.get_all_runs()
-        return {"runs": runs}
+            run = db.get_run(node_id, branch=branch)
+            payload: dict[str, Any] = {"run": run}
+            if include_branch:
+                payload["branch"] = branch
+            return payload
+        runs = db.get_all_runs(branch=branch)
+        payload = {"runs": runs}
+        if include_branch:
+            payload["branch"] = branch
+        return payload
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

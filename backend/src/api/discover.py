@@ -21,7 +21,11 @@ async def discover_tests(req: DiscoverRequest):
     try:
         use_case = DiscoverTestsUseCase()
         tree = await use_case.execute(req.target_path, req.suite_rel_path)
-        return tree.to_dict()
+        result = tree.to_dict()
+        from infrastructure.storage_service import get_target_git_branch
+
+        result["branch"] = get_target_git_branch(req.target_path)
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

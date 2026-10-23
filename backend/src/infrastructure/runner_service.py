@@ -101,7 +101,9 @@ class SubprocessRunnerService:
         env["PYTHONPATH"] = os.pathsep.join(src_paths)
 
         from infrastructure.output_splitter import MethodOutputCollector
+        from infrastructure.storage_service import get_target_git_branch
 
+        run_branch = get_target_git_branch(self.target_path)
         output_collector = MethodOutputCollector(requested_nodes=nodes)
 
         self.proc = await asyncio.create_subprocess_exec(
@@ -139,7 +141,7 @@ class SubprocessRunnerService:
 
         method_outputs = output_collector.get_results()
 
-        # Persist method outputs to SQLite database with code_hash, file_hash, and file_mtime
+        # Persist method outputs to SQLite database with branch, code_hash, file_hash, and file_mtime
         try:
             from infrastructure.history_db import HistoryDatabase
             from infrastructure.test_detail_service import (
@@ -158,10 +160,11 @@ class SubprocessRunnerService:
                     file_hash_cache[rel_file] = (
                         compute_file_hash(full_path) if full_path else None
                     )
+                record["branch"] = run_branch
                 record["code_hash"] = code_hash
                 record["file_mtime"] = file_mtime
                 record["file_hash"] = file_hash_cache[rel_file]
-            db.save_runs(method_outputs)
+            db.save_runs(method_outputs, branch=run_branch)
         except Exception:
             pass
 
@@ -171,6 +174,7 @@ class SubprocessRunnerService:
                 "exit_code": exit_code,
                 "summary": summary,
                 "method_outputs": method_outputs,
+                "branch": run_branch,
             }
         )
 

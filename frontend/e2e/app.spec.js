@@ -913,5 +913,72 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(fixtureClassRow.locator('.rollup-chip.skipped')).toHaveText('2 –')
     await expect(fixtureClassRow).not.toHaveClass(/row-has-failed|row-has-not-run|row-has-passed|row-has-skipped/)
   })
+
+  test('should show DirectoryTree result colors only for the current git branch and switch on branch change', async ({ page }) => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const { execFileSync } = await import('node:child_process')
+
+    const sampleRepoDir = path.resolve(process.cwd(), '../sample-target-repo')
+    const dotGitDir = path.join(sampleRepoDir, '.git')
+    fs.rmSync(dotGitDir, { recursive: true, force: true })
+
+    try {
+      // Initialize isolated git repository inside sample-target-repo on branch-a
+      execFileSync('git', ['init', '-b', 'branch-a'], { cwd: sampleRepoDir })
+      execFileSync('git', ['config', 'user.email', 'e2e@pytestdeck.local'], { cwd: sampleRepoDir })
+      execFileSync('git', ['config', 'user.name', 'PytestDeck E2E'], { cwd: sampleRepoDir })
+      execFileSync('git', ['commit', '--allow-empty', '-m', 'init branch-a'], { cwd: sampleRepoDir })
+
+      await page.goto('/?target_path=./sample-target-repo')
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+      // Clear all history first
+      await page.click('#btn-run-options')
+      await page.click('#btn-clear-history')
+      await expect(page.locator('.ro-history-cleared-msg')).toBeVisible()
+      await page.click('.ro-close')
+
+      const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+      await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+
+      // 1. Run test_calculator.py on branch-a -> becomes passed (green)
+      await calcFileRow.locator('.node-checkbox').click()
+      await page.locator('.btn-primary').click()
+      const stopBtn = page.locator('.btn-danger')
+      await expect(stopBtn).toBeVisible({ timeout: 5000 })
+      await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+      await expect(calcFileRow.locator('.rollup-chip.passed')).toHaveText('11 ✓')
+
+      // 2. Switch target repo to branch-b (identical test files) while page is open, then focus window
+      execFileSync('git', ['checkout', '-b', 'branch-b'], { cwd: sampleRepoDir })
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+
+      // DirectoryTree must no longer show branch-a's passed colors on branch-b
+      await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+      await expect(calcFileRow).not.toHaveClass(/row-has-passed/)
+      await expect(calcFileRow.locator('.rollup-chip.not-run')).toHaveText('11 ○')
+      await expect(calcFileRow.locator('.rollup-chip.passed')).toHaveCount(0)
+
+      // 3. Reload page while on branch-b and verify branch-a's color is not flashed from localStorage
+      await page.reload()
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+      await expect(calcFileRow).toHaveClass(/row-has-not-run/)
+      await expect(calcFileRow).not.toHaveClass(/row-has-passed/)
+
+      // 4. Switch back to branch-a and focus window -> branch-a's passed results are restored
+      execFileSync('git', ['checkout', 'branch-a'], { cwd: sampleRepoDir })
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+
+      await expect(calcFileRow).toHaveClass(/row-has-passed/)
+      await expect(calcFileRow.locator('.rollup-chip.passed')).toHaveText('11 ✓')
+      await expect(calcFileRow.locator('.rollup-chip.not-run')).toHaveCount(0)
+    } finally {
+      fs.rmSync(dotGitDir, { recursive: true, force: true })
+    }
+  })
 })
+
 

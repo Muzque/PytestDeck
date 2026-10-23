@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from infrastructure.storage_service import get_target_storage_dir
+from infrastructure.storage_service import get_target_git_branch, get_target_storage_dir
 
 
 class HistoryDatabase:
@@ -13,6 +13,7 @@ class HistoryDatabase:
     def __init__(
         self, target_path: str | Path | None = None, db_path: str | Path | None = None
     ):
+        self.target_path = target_path
         if db_path:
             self.db_path = Path(db_path)
         else:
@@ -26,6 +27,11 @@ class HistoryDatabase:
         self._ensure_storage_dir()
         self._init_db()
 
+    def get_current_branch(self, target_path: str | Path | None = None) -> str:
+        """Resolves the active git branch identifier for the given or configured target path."""
+        effective_target = target_path if target_path is not None else self.target_path
+        return get_target_git_branch(effective_target)
+
     def _ensure_storage_dir(self) -> None:
         """Ensures parent directory exists."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,32 +42,88 @@ class HistoryDatabase:
         return conn
 
     def _init_db(self) -> None:
-        """Creates the test_runs table and indexes if they do not exist."""
+        """Creates the test_runs table and indexes if they do not exist, migrating legacy schemas."""
         with self._get_connection() as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS test_runs (
-                    node_id TEXT PRIMARY KEY,
-                    outcome TEXT,
-                    duration REAL,
-                    timestamp TEXT,
-                    output TEXT,
-                    code_hash TEXT,
-                    file_mtime REAL,
-                    file_hash TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-            )
-            # Ensure file_hash column exists on existing databases
-            try:
-                conn.execute("ALTER TABLE test_runs ADD COLUMN file_hash TEXT;")
-            except sqlite3.OperationalError:
-                pass
+            cur = conn.execute("PRAGMA table_info(test_runs);")
+            cols = cur.fetchall()
+
+            if not cols:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS test_runs (
+                        node_id TEXT NOT NULL,
+                        branch TEXT NOT NULL DEFAULT '',
+                        outcome TEXT,
+                        duration REAL,
+                        timestamp TEXT,
+                        output TEXT,
+                        code_hash TEXT,
+                        file_mtime REAL,
+                        file_hash TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (node_id, branch)
+                    );
+                    """
+                )
+            else:
+                col_names = {c["name"] for c in cols}
+                if "file_hash" not in col_names:
+                    try:
+                        conn.execute("ALTER TABLE test_runs ADD COLUMN file_hash TEXT;")
+                    except sqlite3.OperationalError:
+                        pass
+
+                has_branch_pk = any(c["name"] == "branch" and c["pk"] > 0 for c in cols)
+                if not has_branch_pk:
+                    default_branch = self.get_current_branch()
+                    conn.execute(
+                        """
+                        CREATE TABLE test_runs_new (
+                            node_id TEXT NOT NULL,
+                            branch TEXT NOT NULL DEFAULT '',
+                            outcome TEXT,
+                            duration REAL,
+                            timestamp TEXT,
+                            output TEXT,
+                            code_hash TEXT,
+                            file_mtime REAL,
+                            file_hash TEXT,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            PRIMARY KEY (node_id, branch)
+                        );
+                        """
+                    )
+                    if "branch" in col_names:
+                        conn.execute(
+                            """
+                            INSERT OR REPLACE INTO test_runs_new
+                                (node_id, branch, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at)
+                            SELECT node_id, COALESCE(branch, ?), outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at
+                            FROM test_runs;
+                            """,
+                            (default_branch,),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            INSERT OR REPLACE INTO test_runs_new
+                                (node_id, branch, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at)
+                            SELECT node_id, ?, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at
+                            FROM test_runs;
+                            """,
+                            (default_branch,),
+                        )
+                    conn.execute("DROP TABLE test_runs;")
+                    conn.execute("ALTER TABLE test_runs_new RENAME TO test_runs;")
 
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_test_runs_updated ON test_runs(updated_at);
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_test_runs_branch ON test_runs(branch);
                 """
             )
             conn.execute(
@@ -86,17 +148,19 @@ class HistoryDatabase:
         code_hash: str | None = None,
         file_mtime: float | None = None,
         file_hash: str | None = None,
+        branch: str | None = None,
     ) -> None:
-        """Saves or updates a test method's execution record."""
+        """Saves or updates a test method's execution record for the given or active git branch."""
         now_ts = timestamp or datetime.datetime.now(datetime.UTC).strftime(
             "%H:%M:%S UTC"
         )
+        resolved_branch = self.get_current_branch() if branch is None else branch
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO test_runs (node_id, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(node_id) DO UPDATE SET
+                INSERT INTO test_runs (node_id, branch, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(node_id, branch) DO UPDATE SET
                     outcome=excluded.outcome,
                     duration=excluded.duration,
                     timestamp=excluded.timestamp,
@@ -108,6 +172,7 @@ class HistoryDatabase:
                 """,
                 (
                     node_id,
+                    resolved_branch,
                     outcome,
                     duration,
                     now_ts,
@@ -119,17 +184,25 @@ class HistoryDatabase:
             )
             conn.commit()
 
-    def save_runs(self, runs: dict[str, dict[str, Any]]) -> None:
-        """Batch saves multiple test method execution outputs."""
+    def save_runs(
+        self, runs: dict[str, dict[str, Any]], branch: str | None = None
+    ) -> None:
+        """Batch saves multiple test method execution outputs for the given or active git branch."""
         if not runs:
             return
+        default_branch = self.get_current_branch() if branch is None else branch
         with self._get_connection() as conn:
             for node_id, data in runs.items():
+                row_branch = (
+                    data.get("branch")
+                    if data.get("branch") is not None
+                    else default_branch
+                )
                 conn.execute(
                     """
-                    INSERT INTO test_runs (node_id, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(node_id) DO UPDATE SET
+                    INSERT INTO test_runs (node_id, branch, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(node_id, branch) DO UPDATE SET
                         outcome=excluded.outcome,
                         duration=excluded.duration,
                         timestamp=excluded.timestamp,
@@ -141,6 +214,7 @@ class HistoryDatabase:
                     """,
                     (
                         node_id,
+                        row_branch,
                         data.get("outcome", "unknown"),
                         data.get("duration"),
                         data.get("timestamp"),
@@ -152,12 +226,15 @@ class HistoryDatabase:
                 )
             conn.commit()
 
-    def get_run(self, node_id: str) -> dict[str, Any] | None:
-        """Fetches the latest run details for a given test node ID."""
+    def get_run(
+        self, node_id: str, branch: str | None = None
+    ) -> dict[str, Any] | None:
+        """Fetches the latest run details for a given test node ID on the active git branch."""
+        resolved_branch = self.get_current_branch() if branch is None else branch
         with self._get_connection() as conn:
             cur = conn.execute(
-                "SELECT node_id, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash FROM test_runs WHERE node_id = ?",
-                (node_id,),
+                "SELECT node_id, branch, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash FROM test_runs WHERE branch = ? AND node_id = ?",
+                (resolved_branch, node_id),
             )
             row = cur.fetchone()
             if row:
@@ -165,28 +242,33 @@ class HistoryDatabase:
 
             # Suffix match fallback (in case relative path prefix differs)
             cur = conn.execute(
-                "SELECT node_id, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash FROM test_runs WHERE node_id LIKE ? LIMIT 1",
-                (f"%{node_id}",),
+                "SELECT node_id, branch, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash FROM test_runs WHERE branch = ? AND node_id LIKE ? LIMIT 1",
+                (resolved_branch, f"%{node_id}"),
             )
             row = cur.fetchone()
             return dict(row) if row else None
 
-    def get_all_runs(self) -> dict[str, dict[str, Any]]:
-        """Returns all recorded test runs indexed by node_id."""
+    def get_all_runs(self, branch: str | None = None) -> dict[str, dict[str, Any]]:
+        """Returns all recorded test runs for the active git branch indexed by node_id."""
+        resolved_branch = self.get_current_branch() if branch is None else branch
         with self._get_connection() as conn:
             cur = conn.execute(
-                "SELECT node_id, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash FROM test_runs ORDER BY updated_at DESC"
+                "SELECT node_id, branch, outcome, duration, timestamp, output, code_hash, file_mtime, file_hash FROM test_runs WHERE branch = ? ORDER BY updated_at DESC",
+                (resolved_branch,),
             )
             return {row["node_id"]: dict(row) for row in cur.fetchall()}
 
-    def clean_stale_runs(self, target_path: str | Path | None = None) -> list[str]:
-        """Checks stored runs against target repo files and purges stale/modified records.
+    def clean_stale_runs(
+        self, target_path: str | Path | None = None, branch: str | None = None
+    ) -> list[str]:
+        """Checks stored runs for the active branch against target repo files and purges stale/modified records.
 
         If a test file is missing or its content/hash has been modified since the run was recorded,
-        the run is deleted from the database.
+        the run for the current branch is deleted from the database.
         Returns a list of node_ids that were removed.
         """
-        if not target_path:
+        effective_target = target_path if target_path is not None else self.target_path
+        if not effective_target:
             return []
         try:
             from domain.services import resolve_target_path
@@ -196,11 +278,14 @@ class HistoryDatabase:
                 resolve_test_file,
             )
 
-            target_dir = resolve_target_path(str(target_path))
+            target_dir = resolve_target_path(str(effective_target))
         except Exception:
             return []
 
-        all_runs = self.get_all_runs()
+        resolved_branch = (
+            self.get_current_branch(target_dir) if branch is None else branch
+        )
+        all_runs = self.get_all_runs(branch=resolved_branch)
         if not all_runs:
             return []
 
@@ -240,16 +325,17 @@ class HistoryDatabase:
                         stale_nodes.append(node_id)
 
         for nid in stale_nodes:
-            self.delete_run(nid)
+            self.delete_run(nid, branch=resolved_branch)
 
         return stale_nodes
 
-    def delete_run(self, node_id: str) -> bool:
-        """Deletes recorded run output for a specific test node ID."""
+    def delete_run(self, node_id: str, branch: str | None = None) -> bool:
+        """Deletes recorded run output for a specific test node ID on the active git branch."""
+        resolved_branch = self.get_current_branch() if branch is None else branch
         with self._get_connection() as conn:
             cur = conn.execute(
-                "DELETE FROM test_runs WHERE node_id = ? OR node_id LIKE ?",
-                (node_id, f"%{node_id}"),
+                "DELETE FROM test_runs WHERE branch = ? AND (node_id = ? OR node_id LIKE ?)",
+                (resolved_branch, node_id, f"%{node_id}"),
             )
             conn.commit()
 
@@ -262,12 +348,18 @@ class HistoryDatabase:
             conn.commit()
             return cur.rowcount
 
-    def prune_orphans(self, valid_node_ids: list[str]) -> int:
-        """Deletes any stored runs whose node_id is no longer present in the valid test list."""
+    def prune_orphans(
+        self, valid_node_ids: list[str], branch: str | None = None
+    ) -> int:
+        """Deletes any stored runs on the active git branch whose node_id is no longer present in the valid test list."""
         if not valid_node_ids:
             return 0
+        resolved_branch = self.get_current_branch() if branch is None else branch
         with self._get_connection() as conn:
-            cur = conn.execute("SELECT node_id FROM test_runs")
+            cur = conn.execute(
+                "SELECT node_id FROM test_runs WHERE branch = ?",
+                (resolved_branch,),
+            )
             existing_ids = [row["node_id"] for row in cur.fetchall()]
 
             # Determine orphans by exact and suffix match
@@ -285,7 +377,8 @@ class HistoryDatabase:
 
             placeholders = ",".join(["?"] * len(orphans))
             del_cur = conn.execute(
-                f"DELETE FROM test_runs WHERE node_id IN ({placeholders})", orphans
+                f"DELETE FROM test_runs WHERE branch = ? AND node_id IN ({placeholders})",
+                [resolved_branch, *orphans],
             )
             conn.commit()
             return del_cur.rowcount
