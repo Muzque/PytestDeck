@@ -3,9 +3,45 @@ import re
 from typing import Any
 
 ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-PYTEST_NODE_PATTERN = re.compile(r"([a-zA-Z0-9_\-\./\\]+\.py::[a-zA-Z0-9_\-\.\[\]:]+)")
+PYTEST_NODE_PREFIX_PATTERN = re.compile(r"^([a-zA-Z0-9_\-\./\\]+\.py::[a-zA-Z0-9_\-\.:]+)(.*)$")
 BEHAVE_SCENARIO_PATTERN = re.compile(r"^(?:Scenario|Scenario Outline):\s*(.*?)(?:\s+#\s*([^\s:]+\.feature)(?::\d+)?)?$")
 BEHAVE_FEATURE_PATTERN = re.compile(r"^Feature:\s*(.*?)(?:\s+#\s*([^\s:]+\.feature)(?::\d+)?)?$")
+BEHAVE_STEP_DURATION_PATTERN = re.compile(r"#\s+\S+:\d+\s+(\d+(?:\.\d+)?)s\s*$")
+
+
+def _extract_pytest_node_id(line: str) -> str | None:
+    """Extracts a full pytest node ID from a line, including parametrized [...] with arbitrary characters."""
+    stripped = line.strip()
+    m = PYTEST_NODE_PREFIX_PATTERN.match(stripped)
+    if not m:
+        return None
+    prefix, rest = m.group(1), m.group(2)
+    if not rest.startswith("["):
+        return prefix
+    depth = 0
+    for idx, ch in enumerate(rest):
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                return prefix + rest[: idx + 1]
+    return prefix + rest.split()[0]
+
+
+def _is_same_test_node_at_path_boundary(node_a: str, node_b: str) -> bool:
+    """Checks if two node IDs refer to the same test item with identical :: tail and / path boundary."""
+    norm_a = node_a.replace("\\", "/")
+    norm_b = node_b.replace("\\", "/")
+    if norm_a == norm_b:
+        return True
+    if "::" not in norm_a or "::" not in norm_b:
+        return norm_a.endswith("/" + norm_b) or norm_b.endswith("/" + norm_a)
+    file_a, tail_a = norm_a.split("::", 1)
+    file_b, tail_b = norm_b.split("::", 1)
+    if tail_a != tail_b:
+        return False
+    return file_a == file_b or file_a.endswith("/" + file_b) or file_b.endswith("/" + file_a)
 
 
 class MethodOutputCollector:
@@ -45,6 +81,14 @@ class MethodOutputCollector:
                 "timestamp": datetime.datetime.now(datetime.UTC).strftime("%H:%M:%S UTC"),
             }
 
+    def _accumulate_behave_step_duration(self, node_id: str, clean_line: str) -> None:
+        if ".feature::" not in node_id or node_id not in self.method_outputs:
+            return
+        step_match = BEHAVE_STEP_DURATION_PATTERN.search(clean_line)
+        if step_match:
+            step_dur = float(step_match.group(1))
+            prev = self.method_outputs[node_id]["duration"]
+            self.method_outputs[node_id]["duration"] = round((prev or 0.0) + step_dur, 4)
 
     def _finalize_behave_scenario(self) -> None:
         if (
@@ -63,6 +107,7 @@ class MethodOutputCollector:
         # If a single targeted method is executed, attribute all process lines to it
         if self.is_single_node and self.single_node_id:
             self.method_outputs[self.single_node_id]["lines"].append(raw_line)
+            self._accumulate_behave_step_duration(self.single_node_id, clean)
             if "PASSED" in clean and self.method_outputs[self.single_node_id]["outcome"] == "unknown":
                 self.method_outputs[self.single_node_id]["outcome"] = "passed"
             elif "FAILED" in clean or "\x1b[31m" in raw_line or "Assertion Failed:" in clean or "Traceback (most recent call last):" in clean:
@@ -89,7 +134,8 @@ class MethodOutputCollector:
         sc_match = BEHAVE_SCENARIO_PATTERN.match(stripped)
         if sc_match:
             self._finalize_behave_scenario()
-            title = sc_match.group(1).strip()
+            raw_title = sc_match.group(1).strip()
+            title = re.sub(r"\s+--\s+@\d+\.\d+.*$", "", raw_title).strip()
             feat_file = sc_match.group(2) or self.current_feature_file or ""
             node_id = f"{feat_file}::{title}" if feat_file else title
             self.current_node = node_id
@@ -98,18 +144,18 @@ class MethodOutputCollector:
             return
 
         # Check for Pytest test method start line (e.g. "path/to/test.py::test_func ...")
-        if not stripped.startswith(("=", "-", "rootdir:", "cachedir:", "plugins:")):
-            py_match = PYTEST_NODE_PATTERN.search(clean)
-            if py_match and not clean.startswith("FAILURES"):
-                node_id = py_match.group(1)
+        if not stripped.startswith(("=", "-", "rootdir:", "cachedir:", "plugins:")) and not clean.startswith("FAILURES"):
+            node_id = _extract_pytest_node_id(clean)
+            if node_id:
                 self.current_node = node_id
                 self._ensure_node(node_id)
                 self.method_outputs[node_id]["lines"].append(raw_line)
-                if "PASSED" in clean:
+                after_node = stripped[len(node_id) :]
+                if re.search(r"(?:^|\s)(?:PASSED|XPASS)(?:\s+\[\s*\d+%\]|\b)", after_node):
                     self.method_outputs[node_id]["outcome"] = "passed"
-                elif "FAILED" in clean:
+                elif re.search(r"(?:^|\s)(?:FAILED|ERROR)(?:\s+\[\s*\d+%\]|\b)", after_node):
                     self.method_outputs[node_id]["outcome"] = "failed"
-                elif "SKIPPED" in clean:
+                elif re.search(r"(?:^|\s)(?:SKIPPED|XFAIL)(?:\s+\[\s*\d+%\]|\b)", after_node):
                     self.method_outputs[node_id]["outcome"] = "skipped"
                 return
 
@@ -146,7 +192,6 @@ class MethodOutputCollector:
                 self.method_outputs[self.current_failure_node]["lines"].append(raw_line)
                 return
 
-
         # Regular lines during test method execution
         if self.current_node and self.current_node in self.method_outputs:
             if stripped.startswith(("=====", "short test summary")):
@@ -161,6 +206,7 @@ class MethodOutputCollector:
                 self.current_node = None
                 return
             self.method_outputs[self.current_node]["lines"].append(raw_line)
+            self._accumulate_behave_step_duration(self.current_node, clean)
             if "PASSED" in clean and self.method_outputs[self.current_node]["outcome"] == "unknown":
                 self.method_outputs[self.current_node]["outcome"] = "passed"
             elif (
@@ -179,6 +225,8 @@ class MethodOutputCollector:
         if not report_data or not isinstance(report_data, dict):
             return
         tests = report_data.get("tests", [])
+        claimed_keys: set[str] = set()
+
         for t in tests:
             nid = t.get("nodeid", "")
             outcome = t.get("outcome", "unknown")
@@ -197,18 +245,29 @@ class MethodOutputCollector:
             duration = round(total_dur, 4) if has_dur else None
 
             matched_key = None
-            if nid in self.method_outputs:
+            if nid in self.method_outputs and nid not in claimed_keys:
                 matched_key = nid
             else:
-                for k in self.method_outputs:
-                    if k.endswith(nid) or nid.endswith(k):
-                        matched_key = k
-                        break
+                candidates = [
+                    k
+                    for k in self.method_outputs
+                    if k not in claimed_keys and _is_same_test_node_at_path_boundary(k, nid)
+                ]
+                if candidates:
+                    candidates.sort(key=lambda k: abs(len(k) - len(nid)))
+                    matched_key = candidates[0]
 
             if not matched_key:
                 self._ensure_node(nid)
                 matched_key = nid
+            elif len(nid) > len(matched_key):
+                # Re-key to the more fully path-qualified node ID
+                entry = self.method_outputs.pop(matched_key)
+                entry["node_id"] = nid
+                self.method_outputs[nid] = entry
+                matched_key = nid
 
+            claimed_keys.add(matched_key)
             self.method_outputs[matched_key]["outcome"] = outcome
             if duration is not None:
                 self.method_outputs[matched_key]["duration"] = duration
@@ -246,3 +305,4 @@ class MethodOutputCollector:
                 "line_count": len(data["lines"]),
             }
         return result
+

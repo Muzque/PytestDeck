@@ -35,22 +35,44 @@ const isFunctionNode = computed(() => {
   )
 })
 
-const nodeRecord = computed(() => {
-  if (!isFunctionNode.value) return null
-  const outputs = props.methodOutputs || {}
-  const id = props.node.id
-  if (!id) return null
-
-  if (outputs[id]) {
-    return outputs[id]
+const isSameTestNodeId = (idA, idB) => {
+  if (!idA || !idB) return false
+  const normA = idA.replace(/\\/g, '/')
+  const normB = idB.replace(/\\/g, '/')
+  if (normA === normB) return true
+  const sepA = normA.indexOf('::')
+  const sepB = normB.indexOf('::')
+  if (sepA === -1 || sepB === -1) {
+    return normA.endsWith('/' + normB) || normB.endsWith('/' + normA)
   }
+  const tailA = normA.slice(sepA)
+  const tailB = normB.slice(sepB)
+  if (tailA !== tailB) return false
+  const fileA = normA.slice(0, sepA)
+  const fileB = normB.slice(0, sepB)
+  return fileA === fileB || fileA.endsWith('/' + fileB) || fileB.endsWith('/' + fileA)
+}
 
-  for (const [key, val] of Object.entries(outputs)) {
-    if ((id.endsWith(key) || key.endsWith(id)) && val) {
-      return val
+const findNodeRecord = (outputs, id) => {
+  if (!id || !outputs) return null
+  if (outputs[id]) return outputs[id]
+  let bestKey = null
+  let bestDiff = Infinity
+  for (const key of Object.keys(outputs)) {
+    if (outputs[key] && isSameTestNodeId(id, key)) {
+      const diff = Math.abs(id.length - key.length)
+      if (diff < bestDiff) {
+        bestDiff = diff
+        bestKey = key
+      }
     }
   }
-  return null
+  return bestKey ? outputs[bestKey] : null
+}
+
+const nodeRecord = computed(() => {
+  if (!isFunctionNode.value) return null
+  return findNodeRecord(props.methodOutputs || {}, props.node.id)
 })
 
 const nodeOutcome = computed(() => {
@@ -93,15 +115,7 @@ const rollupCounts = computed(() => {
     } else {
       const id = item.id
       if (!id) return
-      let rec = outputs[id]
-      if (!rec) {
-        for (const [k, v] of Object.entries(outputs)) {
-          if ((id.endsWith(k) || k.endsWith(id)) && v) {
-            rec = v
-            break
-          }
-        }
-      }
+      const rec = findNodeRecord(outputs, id)
       if (rec?.outcome) {
         const out = rec.outcome.toLowerCase()
         if (out === 'passed') counts.passed++
