@@ -624,8 +624,61 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(featureFileRow).not.toHaveClass(/row-has-running/)
     await expect(slowScenarioRow).toHaveClass(/row-outcome-passed/)
   })
+
+  test('should copy Terminal Output selection with Ctrl+C and Cmd+C without overwriting clipboard when unselected', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Run test_calculator.py so Terminal Output has multi-line logs
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    const xtermScreen = page.locator('.terminal-container .xterm-screen')
+    await expect(xtermScreen).toBeVisible()
+
+    // Seed clipboard with a sentinel value
+    await page.evaluate(() => navigator.clipboard.writeText('INITIAL_CLIPBOARD_SENTINEL'))
+
+    // 1. Focus terminal without selecting text (single click) and press Ctrl+C -> clipboard must NOT be overwritten
+    const box = await xtermScreen.boundingBox()
+    await page.mouse.click(box.x + 20, box.y + 15)
+    await page.keyboard.press('Control+c')
+    const afterEmptyCtrlC = await page.evaluate(() => navigator.clipboard.readText())
+    expect(afterEmptyCtrlC).toBe('INITIAL_CLIPBOARD_SENTINEL')
+
+    // 2. Drag-select a partial range on the first visible line in Terminal Output and press Ctrl+C
+    await page.mouse.move(box.x + 10, box.y + 12)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 180, box.y + 12, { steps: 10 })
+    await page.mouse.up()
+
+    await page.keyboard.press('Control+c')
+    const ctrlCCopied = await page.evaluate(() => navigator.clipboard.readText())
+    expect(ctrlCCopied).not.toBe('INITIAL_CLIPBOARD_SENTINEL')
+    expect(ctrlCCopied.trim().length).toBeGreaterThan(0)
+    expect(ctrlCCopied).not.toContain('\n')
+
+    // 3. Reset clipboard sentinel, re-select text in Terminal Output, and press Cmd+C (Meta+c)
+    await page.evaluate(() => navigator.clipboard.writeText('SECOND_CLIPBOARD_SENTINEL'))
+    await page.mouse.move(box.x + 10, box.y + 12)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 180, box.y + 12, { steps: 10 })
+    await page.mouse.up()
+
+    await page.keyboard.press('Meta+c')
+    const cmdCCopied = await page.evaluate(() => navigator.clipboard.readText())
+    expect(cmdCCopied).toBe(ctrlCCopied)
+
+    // 4. Click Copy Output toolbar button -> copies the entire terminal output, not just the partial selection
+    await page.locator('.btn-copy-terminal').click()
+    const fullOutputCopied = await page.evaluate(() => navigator.clipboard.readText())
+    expect(fullOutputCopied.length).toBeGreaterThan(ctrlCCopied.length)
+    expect(fullOutputCopied).toContain('test_calculator.py')
+    expect(fullOutputCopied).toContain('passed')
+  })
 })
-
-
-
-
