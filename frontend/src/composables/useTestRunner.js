@@ -978,13 +978,19 @@ export function useTestRunner() {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ action: 'STOP' }))
       }
+      ws.onopen = null
+      ws.onmessage = null
+      ws.onerror = null
+      ws.onclose = null
       ws.close()
       ws = null
     }
+    appendLog('\r\n\x1b[1;31m[CRITICAL] Test execution stopped by user.\x1b[0m\r\n')
     isRunning.value = false
     liveMethodRun.value = null
     restoreRunningOutputs()
   }
+
 
   const selectHistoryItem = (item) => {
     selectedHistoryId.value = item.id

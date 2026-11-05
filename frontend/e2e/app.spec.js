@@ -136,14 +136,14 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.click('#run-options-apply')
   })
 
-  test('should handle stop execution action cleanly', async ({ page }) => {
+  test('should handle stop execution action cleanly and log critical abort message to terminal', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.waitForSelector('.tree-container', { timeout: 60000 })
     const rootDirRow = page.locator('.node-row:has(.type-badge.directory)').first()
-    
-    // Start test execution
+    const xtermRows = page.locator('.terminal-container .xterm-rows')
+
+    // 1. Immediate stop (before pytest session header is printed)
     await page.click('.btn-primary')
-    
-    // Stop button should appear and tree checkboxes should be locked while running
     const stopBtn = page.locator('.btn-danger')
     await expect(stopBtn).toBeVisible({ timeout: 10000 })
     await expect(rootDirRow).toHaveClass(/row-has-running/)
@@ -154,7 +154,30 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('.btn-primary')).toBeVisible({ timeout: 10000 })
     await expect(rootDirRow).not.toHaveClass(/row-has-running/)
     await expect(rootDirRow.locator('.node-checkbox')).toBeEnabled()
+
+    // Terminal Output must show the critical abort message even when stopped early
+    await expect(xtermRows).toContainText('[CRITICAL] Test execution stopped by user.')
+
+    // 2. Mid-stream stop (after test session has started streaming output)
+    await page.click('.btn-primary')
+    await expect(stopBtn).toBeVisible({ timeout: 10000 })
+    await expect(xtermRows).toContainText('test_calculator.py', { timeout: 15000 })
+    await stopBtn.click()
+
+    await expect(page.locator('.btn-primary')).toBeVisible({ timeout: 10000 })
+    await expect(rootDirRow).not.toHaveClass(/row-has-running/)
+    await expect(xtermRows).toContainText('[CRITICAL] Test execution stopped by user.')
+
+    // 3. Copy Output should include the critical abort message stripped of ANSI escape codes
+    const copyBtn = page.locator('.btn-copy-terminal')
+    await expect(copyBtn).toBeEnabled()
+    await copyBtn.click()
+    await expect(copyBtn).toContainText('Copied')
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText())
+    expect(clipboardText).toContain('[CRITICAL] Test execution stopped by user.')
+    expect(clipboardText).not.toContain('\x1b[')
   })
+
 
   test('should display Detail Info tab when a single test method is selected in Integration suite', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
