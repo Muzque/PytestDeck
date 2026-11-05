@@ -129,6 +129,49 @@ def test_api_run_options_endpoints(client):
     assert data["marker_filter"] == "unit and not slow"
     assert data["extra_args"] == "-s --tb=short"
 
+    # Save distinct options for integration and acceptance suites
+    it_resp = client.post(
+        "/api/run-options",
+        json={
+            "suite": "integration",
+            "marker_filter": "db_only",
+            "extra_args": "-k health",
+        },
+    )
+    assert it_resp.status_code == 200
+
+    ac_resp = client.post(
+        "/api/run-options",
+        json={
+            "suite": "acceptance",
+            "marker_filter": "wip",
+            "extra_args": "--no-capture",
+        },
+    )
+    assert ac_resp.status_code == 200
+
+    # Verify each suite returns its own options without overwriting others
+    assert client.get("/api/run-options?suite=unit").json() == {
+        "marker_filter": "unit and not slow",
+        "extra_args": "-s --tb=short",
+    }
+    assert client.get("/api/run-options?suite=integration").json() == {
+        "marker_filter": "db_only",
+        "extra_args": "-k health",
+    }
+    assert client.get("/api/run-options?suite=acceptance").json() == {
+        "marker_filter": "wip",
+        "extra_args": "--no-capture",
+    }
+
+    all_resp = client.get("/api/run-options?include_suites=1")
+    assert all_resp.status_code == 200
+    suites_data = all_resp.json()["suites"]
+    assert suites_data["unit"]["extra_args"] == "-s --tb=short"
+    assert suites_data["integration"]["extra_args"] == "-k health"
+    assert suites_data["acceptance"]["extra_args"] == "--no-capture"
+
+
 
 def test_api_history_branch_switching(client, tmp_path):
     import subprocess

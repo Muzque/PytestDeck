@@ -403,6 +403,97 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.click('#run-options-apply')
   })
 
+  test('should store and apply Run Options separately for Unit, Integration, and Acceptance suites', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const suiteSelect = page.locator('.suite-select')
+    const markerInput = page.locator('#run-options-marker')
+    const extraInput = page.locator('#run-options-extra')
+    const summaryChips = page.locator('.run-options-summary')
+
+    try {
+      // 1. Set options on Unit Tests (index 0)
+      await page.click('#btn-run-options')
+      await markerInput.fill('smoke')
+      await extraInput.fill('-v --tb=short')
+      await page.click('#run-options-apply')
+
+      await expect(summaryChips).toBeVisible()
+      await expect(summaryChips).toContainText('-m smoke')
+      await expect(summaryChips).toContainText('-v --tb=short')
+
+      // 2. Switch to Integration Tests (index 1) -> UT options must not leak into IT
+      await suiteSelect.selectOption({ index: 1 })
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+      await expect(summaryChips).not.toBeVisible()
+
+      // Set IT-specific extra flags
+      await page.click('#btn-run-options')
+      await expect(markerInput).toHaveValue('')
+      await expect(extraInput).toHaveValue('')
+      await markerInput.fill('api_mark')
+      await extraInput.fill('--maxfail=1')
+      await page.click('#run-options-apply')
+
+      await expect(summaryChips).toBeVisible()
+      await expect(summaryChips).toContainText('-m api_mark')
+      await expect(summaryChips).toContainText('--maxfail=1')
+
+      // 3. Switch to Acceptance (Behave) (index 2) -> IT options must not leak into AC
+      await suiteSelect.selectOption({ index: 2 })
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+      await expect(summaryChips).not.toBeVisible()
+
+      await page.click('#btn-run-options')
+      await expect(markerInput).toHaveValue('')
+      await expect(extraInput).toHaveValue('')
+      await extraInput.fill('--no-capture')
+      await page.click('#run-options-apply')
+
+      await expect(summaryChips).toBeVisible()
+      await expect(summaryChips).toContainText('--no-capture')
+
+      // 4. Reload page and verify all three suites retained their respective options
+      await page.reload()
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+      // Default after reload is Unit Tests
+      await expect(summaryChips).toContainText('-m smoke')
+      await expect(summaryChips).toContainText('-v --tb=short')
+
+      // Switch to Integration Tests and run a single method (auto-appends -s only to IT)
+      await suiteSelect.selectOption({ index: 1 })
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+      await expect(summaryChips).toContainText('-m api_mark')
+      await expect(summaryChips).toContainText('--maxfail=1')
+
+      const fileToggle = page.locator('.node-row:has(.type-badge.file) .toggle-icon').first()
+      await fileToggle.click()
+      const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
+      await funcRow.click()
+      const runMethodBtn = page.locator('.btn-run-method')
+      await runMethodBtn.click()
+      await expect(runMethodBtn).toBeEnabled({ timeout: 20000 })
+      await expect(summaryChips).toContainText('--maxfail=1 -s')
+
+      // Switch back to Acceptance and verify -s was NOT added to Acceptance
+      await suiteSelect.selectOption({ index: 2 })
+      await page.waitForSelector('.tree-container', { timeout: 60000 })
+      await expect(summaryChips).toContainText('--no-capture')
+      await expect(summaryChips).not.toContainText('-s')
+    } finally {
+      // Clean up options across all 3 suites
+      for (const idx of [0, 1, 2]) {
+        await suiteSelect.selectOption({ index: idx })
+        await page.waitForSelector('.tree-container', { timeout: 60000 })
+        const clearAllBtn = page.locator('.btn-clear-all')
+        if (await clearAllBtn.isVisible()) {
+          await clearAllBtn.click()
+        }
+      }
+    }
+  })
+
   test('should reset test result when test file is modified', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
 

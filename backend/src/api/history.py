@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel
 
-from infrastructure.history_db import HistoryDatabase
+from infrastructure.history_db import HistoryDatabase, normalize_suite_slot
 
 router = APIRouter(prefix="/api/test-runs", tags=["history"])
 
@@ -114,15 +114,22 @@ run_options_router = APIRouter(prefix="/api/run-options", tags=["history"])
 
 class SaveRunOptionsRequest(BaseModel):
     target_path: str = ""
+    suite: str = "unit"
     marker_filter: str = ""
     extra_args: str = ""
 
 
 @run_options_router.get("")
-async def get_run_options(target_path: str = Query("", description="Target repo path")):
+async def get_run_options(
+    target_path: str = Query("", description="Target repo path"),
+    suite: str = Query("unit", description="Suite slot or path (unit, integration, acceptance)"),
+    include_suites: bool = Query(False, description="Whether to include all suite slots in payload"),
+):
     try:
         db = HistoryDatabase(target_path=target_path)
-        options = db.get_run_options()
+        options: dict[str, Any] = dict(db.get_run_options(suite=suite))
+        if include_suites:
+            options["suites"] = db.get_all_run_options()
         return options
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -132,11 +139,18 @@ async def get_run_options(target_path: str = Query("", description="Target repo 
 async def save_run_options(req: SaveRunOptionsRequest):
     try:
         db = HistoryDatabase(target_path=req.target_path)
-        db.save_run_options(marker_filter=req.marker_filter, extra_args=req.extra_args)
+        slot = normalize_suite_slot(req.suite)
+        db.save_run_options(
+            marker_filter=req.marker_filter,
+            extra_args=req.extra_args,
+            suite=slot,
+        )
         return {
             "success": True,
+            "suite": slot,
             "marker_filter": req.marker_filter,
             "extra_args": req.extra_args,
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+

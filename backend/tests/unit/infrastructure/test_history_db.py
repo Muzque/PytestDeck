@@ -99,6 +99,64 @@ def test_history_database_run_options(tmp_path):
     assert updated["marker_filter"] == "integration"
     assert updated["extra_args"] == ""
 
+    # Suite-scoped run options (unit, integration, acceptance)
+    db.save_run_options(marker_filter="smoke", extra_args="-v --tb=short", suite="unit")
+    db.save_run_options(marker_filter="api", extra_args="-s", suite="integration")
+    db.save_run_options(marker_filter="e2e", extra_args="--no-capture", suite="acceptance")
+
+    assert db.get_run_options(suite="unit") == {
+        "marker_filter": "smoke",
+        "extra_args": "-v --tb=short",
+    }
+    assert db.get_run_options(suite="integration") == {
+        "marker_filter": "api",
+        "extra_args": "-s",
+    }
+    assert db.get_run_options(suite="acceptance") == {
+        "marker_filter": "e2e",
+        "extra_args": "--no-capture",
+    }
+    all_opts = db.get_all_run_options()
+    assert all_opts["unit"]["extra_args"] == "-v --tb=short"
+    assert all_opts["integration"]["extra_args"] == "-s"
+    assert all_opts["acceptance"]["extra_args"] == "--no-capture"
+
+
+def test_history_database_legacy_run_options_migration(tmp_path):
+    import sqlite3
+
+    db_file = tmp_path / "legacy_options.db"
+    with sqlite3.connect(str(db_file)) as conn:
+        conn.execute(
+            """
+            CREATE TABLE run_options (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                marker_filter TEXT,
+                extra_args TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO run_options (id, marker_filter, extra_args) VALUES (1, 'legacy_mark', '-v -s');"
+        )
+        conn.commit()
+
+    db = HistoryDatabase(db_path=db_file)
+    assert db.get_run_options(suite="unit") == {
+        "marker_filter": "legacy_mark",
+        "extra_args": "-v -s",
+    }
+    assert db.get_run_options(suite="integration") == {
+        "marker_filter": "",
+        "extra_args": "",
+    }
+    assert db.get_run_options(suite="acceptance") == {
+        "marker_filter": "",
+        "extra_args": "",
+    }
+
+
 
 def test_clean_stale_runs_on_file_modification(tmp_path):
     repo_dir = tmp_path / "target_repo"
