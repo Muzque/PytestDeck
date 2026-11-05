@@ -349,21 +349,134 @@ export function useTestRunner() {
   const logs = ref([])
   const exitCode = ref(null)
   const summary = ref(null)
-  const markerFilter = ref('')
-  const extraArgs = ref('')
+
+  const suiteRunOptions = ref({
+    unit: { marker_filter: '', extra_args: '' },
+    integration: { marker_filter: '', extra_args: '' },
+    acceptance: { marker_filter: '', extra_args: '' }
+  })
+
+  const getSuiteSlot = (suitePath) => {
+    const raw = suitePath ?? activeSuite.value ?? ''
+    const suites = availableSuites.value || []
+    if (suites[2] && raw === suites[2].path) return 'acceptance'
+    if (suites[1] && raw === suites[1].path) return 'integration'
+    if (suites[0] && raw === suites[0].path) return 'unit'
+    const s = String(raw).toLowerCase()
+    if (s.includes('acceptance') || s.endsWith('.feature')) return 'acceptance'
+    if (s.includes('integration')) return 'integration'
+    return 'unit'
+  }
+
+  const currentSuiteSlot = computed(() => getSuiteSlot(activeSuite.value))
 
   let isInitialRunOptionsLoaded = false
+  const pendingPersistSlots = new Set()
+
+  const persistRunOptions = async (slotOverride = null) => {
+    if (!isInitialRunOptionsLoaded) return
+    const slot = slotOverride || currentSuiteSlot.value
+    const current = suiteRunOptions.value[slot] || { marker_filter: '', extra_args: '' }
+    try {
+      await fetch('/api/run-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPath.value || '',
+          suite: slot,
+          marker_filter: current.marker_filter || '',
+          extra_args: current.extra_args || ''
+        })
+      })
+    } catch (e) {
+      console.error('Failed to save run options to server', e)
+    }
+  }
+
+  const schedulePersistRunOptions = (slotOverride = null) => {
+    if (!isInitialRunOptionsLoaded) return
+    const slot = slotOverride || currentSuiteSlot.value
+    if (pendingPersistSlots.has(slot)) return
+    pendingPersistSlots.add(slot)
+    queueMicrotask(async () => {
+      pendingPersistSlots.delete(slot)
+      await persistRunOptions(slot)
+    })
+  }
+
+  const markerFilter = computed({
+    get() {
+      const slot = currentSuiteSlot.value
+      return suiteRunOptions.value[slot]?.marker_filter || ''
+    },
+    set(val) {
+      const slot = currentSuiteSlot.value
+      const nextVal = val || ''
+      if ((suiteRunOptions.value[slot]?.marker_filter || '') === nextVal) return
+      suiteRunOptions.value = {
+        ...suiteRunOptions.value,
+        [slot]: {
+          ...(suiteRunOptions.value[slot] || { marker_filter: '', extra_args: '' }),
+          marker_filter: nextVal
+        }
+      }
+      schedulePersistRunOptions(slot)
+    }
+  })
+
+  const extraArgs = computed({
+    get() {
+      const slot = currentSuiteSlot.value
+      return suiteRunOptions.value[slot]?.extra_args || ''
+    },
+    set(val) {
+      const slot = currentSuiteSlot.value
+      const nextVal = val || ''
+      if ((suiteRunOptions.value[slot]?.extra_args || '') === nextVal) return
+      suiteRunOptions.value = {
+        ...suiteRunOptions.value,
+        [slot]: {
+          ...(suiteRunOptions.value[slot] || { marker_filter: '', extra_args: '' }),
+          extra_args: nextVal
+        }
+      }
+      schedulePersistRunOptions(slot)
+    }
+  })
+
 
   const loadStoredRunOptions = async () => {
     try {
       const url = targetPath.value
-        ? `/api/run-options?target_path=${encodeURIComponent(targetPath.value)}`
-        : '/api/run-options'
+        ? `/api/run-options?target_path=${encodeURIComponent(targetPath.value)}&include_suites=1`
+        : '/api/run-options?include_suites=1'
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        if (data.marker_filter !== undefined) markerFilter.value = data.marker_filter || ''
-        if (data.extra_args !== undefined) extraArgs.value = data.extra_args || ''
+        if (data.suites && typeof data.suites === 'object') {
+          suiteRunOptions.value = {
+            unit: {
+              marker_filter: data.suites.unit?.marker_filter || '',
+              extra_args: data.suites.unit?.extra_args || ''
+            },
+            integration: {
+              marker_filter: data.suites.integration?.marker_filter || '',
+              extra_args: data.suites.integration?.extra_args || ''
+            },
+            acceptance: {
+              marker_filter: data.suites.acceptance?.marker_filter || '',
+              extra_args: data.suites.acceptance?.extra_args || ''
+            }
+          }
+        } else {
+          suiteRunOptions.value = {
+            ...suiteRunOptions.value,
+            unit: {
+              marker_filter: data.marker_filter || '',
+              extra_args: data.extra_args || ''
+            }
+          }
+        }
       }
     } catch (e) {
       console.error('Failed to load run options from server', e)
@@ -372,28 +485,8 @@ export function useTestRunner() {
     }
   }
 
-  const persistRunOptions = async () => {
-    if (!isInitialRunOptionsLoaded) return
-    try {
-      await fetch('/api/run-options', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_path: targetPath.value || '',
-          marker_filter: markerFilter.value || '',
-          extra_args: extraArgs.value || ''
-        })
-      })
-    } catch (e) {
-      console.error('Failed to save run options to server', e)
-    }
-  }
-
   loadStoredRunOptions()
 
-  watch([markerFilter, extraArgs], () => {
-    persistRunOptions()
-  })
 
 
   const runHistory = ref([])

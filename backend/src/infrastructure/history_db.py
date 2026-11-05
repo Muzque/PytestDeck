@@ -10,6 +10,21 @@ from infrastructure.storage_service import (
     get_target_storage_dir,
 )
 
+SUITE_SLOTS: tuple[str, ...] = ("unit", "integration", "acceptance")
+
+
+def normalize_suite_slot(suite: str | None) -> str:
+    """Normalizes a suite identifier or path into one of 'unit', 'integration', or 'acceptance'."""
+    if not suite:
+        return "unit"
+    s = suite.strip().lower()
+    if s in ("acceptance", "ac", "behave") or "acceptance" in s or s.endswith(".feature"):
+        return "acceptance"
+    if s in ("integration", "it") or "integration" in s:
+        return "integration"
+    return "unit"
+
+
 
 class HistoryDatabase:
     """Manages SQLite persistence for individual test method run outputs, durations, outcomes, and code hashes."""
@@ -130,17 +145,44 @@ class HistoryDatabase:
                 CREATE INDEX IF NOT EXISTS idx_test_runs_branch ON test_runs(branch);
                 """
             )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS run_options (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    marker_filter TEXT,
-                    extra_args TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-            )
+            ro_cur = conn.execute("PRAGMA table_info(run_options);")
+            ro_cols = ro_cur.fetchall()
+            if not ro_cols:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS run_options (
+                        suite TEXT PRIMARY KEY,
+                        marker_filter TEXT NOT NULL DEFAULT '',
+                        extra_args TEXT NOT NULL DEFAULT '',
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                    """
+                )
+            else:
+                ro_col_names = {c["name"] for c in ro_cols}
+                if "suite" not in ro_col_names:
+                    conn.execute(
+                        """
+                        CREATE TABLE run_options_new (
+                            suite TEXT PRIMARY KEY,
+                            marker_filter TEXT NOT NULL DEFAULT '',
+                            extra_args TEXT NOT NULL DEFAULT '',
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        );
+                        """
+                    )
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO run_options_new (suite, marker_filter, extra_args, updated_at)
+                        SELECT 'unit', COALESCE(marker_filter, ''), COALESCE(extra_args, ''), updated_at
+                        FROM run_options
+                        WHERE id = 1;
+                        """
+                    )
+                    conn.execute("DROP TABLE run_options;")
+                    conn.execute("ALTER TABLE run_options_new RENAME TO run_options;")
             conn.commit()
+
 
     def save_run(
         self,
@@ -432,27 +474,35 @@ class HistoryDatabase:
             }
 
 
-    def save_run_options(self, marker_filter: str = "", extra_args: str = "") -> None:
-        """Saves run options (marker filter and extra args) to the database."""
+    def save_run_options(
+        self,
+        marker_filter: str = "",
+        extra_args: str = "",
+        suite: str = "unit",
+    ) -> None:
+        """Saves run options (marker filter and extra args) for the specified suite slot."""
+        slot = normalize_suite_slot(suite)
         with self._get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO run_options (id, marker_filter, extra_args, updated_at)
-                VALUES (1, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(id) DO UPDATE SET
+                INSERT INTO run_options (suite, marker_filter, extra_args, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(suite) DO UPDATE SET
                     marker_filter=excluded.marker_filter,
                     extra_args=excluded.extra_args,
                     updated_at=CURRENT_TIMESTAMP;
                 """,
-                (marker_filter or "", extra_args or ""),
+                (slot, marker_filter or "", extra_args or ""),
             )
             conn.commit()
 
-    def get_run_options(self) -> dict[str, str]:
-        """Retrieves stored run options (marker filter and extra args)."""
+    def get_run_options(self, suite: str = "unit") -> dict[str, str]:
+        """Retrieves stored run options (marker filter and extra args) for the specified suite slot."""
+        slot = normalize_suite_slot(suite)
         with self._get_connection() as conn:
             cur = conn.execute(
-                "SELECT marker_filter, extra_args FROM run_options WHERE id = 1"
+                "SELECT marker_filter, extra_args FROM run_options WHERE suite = ?",
+                (slot,),
             )
             row = cur.fetchone()
             if row:
@@ -461,3 +511,21 @@ class HistoryDatabase:
                     "extra_args": row["extra_args"] or "",
                 }
             return {"marker_filter": "", "extra_args": ""}
+
+    def get_all_run_options(self) -> dict[str, dict[str, str]]:
+        """Retrieves stored run options for all three suite slots ('unit', 'integration', 'acceptance')."""
+        result: dict[str, dict[str, str]] = {
+            slot: {"marker_filter": "", "extra_args": ""} for slot in SUITE_SLOTS
+        }
+        with self._get_connection() as conn:
+            cur = conn.execute(
+                "SELECT suite, marker_filter, extra_args FROM run_options"
+            )
+            for row in cur.fetchall():
+                slot = normalize_suite_slot(row["suite"])
+                result[slot] = {
+                    "marker_filter": row["marker_filter"] or "",
+                    "extra_args": row["extra_args"] or "",
+                }
+        return result
+
