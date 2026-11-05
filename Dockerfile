@@ -56,4 +56,4 @@ RUN chmod +x /app/entrypoint.sh
 WORKDIR /app/backend
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9388"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "9388", "--ws-ping-interval", "30", "--ws-ping-timeout", "120"]

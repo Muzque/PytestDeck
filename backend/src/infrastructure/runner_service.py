@@ -21,14 +21,16 @@ class SubprocessRunnerService:
         proc: Active asyncio subprocess handle or None if not running.
     """
 
-    def __init__(self, target_path: str):
+    def __init__(self, target_path: str, heartbeat_interval: float = 15.0):
         """Initializes the SubprocessRunnerService instance.
 
         Args:
             target_path: Absolute directory path of target repository.
+            heartbeat_interval: Interval in seconds between server-side ping heartbeats while waiting for stdout.
         """
         self.target_path = Path(target_path).resolve()
         self.proc: asyncio.subprocess.Process | None = None
+        self.heartbeat_interval = heartbeat_interval
 
     def detect_runner_type(self, nodes: list[str] | None = None) -> RunnerType:
         """Determines the appropriate test runner framework type based on target nodes.
@@ -133,39 +135,53 @@ class SubprocessRunnerService:
         )
 
         if self.proc.stdout:
-            while True:
-                line = await self.proc.stdout.readline()
-                if not line:
-                    break
-                line_str = line.decode("utf-8", errors="replace")
-                if "__PYTESTDECK_EVENT__:" in line_str:
-                    for match in PYTESTDECK_EVENT_PATTERN.finditer(line_str):
-                        try:
-                            ev = json.loads(match.group(1))
-                            ev_node_id = ev.get("node_id", "")
-                            ev_outcome = ev.get("outcome", "")
-                            ev_duration = ev.get("duration")
-                            if ev_node_id and ev_outcome:
-                                output_collector.record_status_event(
-                                    ev_node_id, ev_outcome, ev_duration
-                                )
-                                yield json.dumps(
-                                    {
-                                        "type": "test_status",
-                                        "node_id": ev_node_id,
-                                        "outcome": ev_outcome,
-                                        "duration": ev_duration,
-                                    }
-                                )
-                        except Exception:
-                            pass
-                    cleaned_line = PYTESTDECK_EVENT_PATTERN.sub("", line_str)
-                    if not cleaned_line.strip():
+            read_task: asyncio.Task[bytes] | None = None
+            try:
+                while True:
+                    if read_task is None:
+                        read_task = asyncio.create_task(self.proc.stdout.readline())
+                    done, _ = await asyncio.wait(
+                        {read_task}, timeout=self.heartbeat_interval
+                    )
+                    if not done:
+                        yield json.dumps({"type": "ping"})
                         continue
-                    line_str = cleaned_line
+                    line = read_task.result()
+                    read_task = None
+                    if not line:
+                        break
+                    line_str = line.decode("utf-8", errors="replace")
+                    if "__PYTESTDECK_EVENT__:" in line_str:
+                        for match in PYTESTDECK_EVENT_PATTERN.finditer(line_str):
+                            try:
+                                ev = json.loads(match.group(1))
+                                ev_node_id = ev.get("node_id", "")
+                                ev_outcome = ev.get("outcome", "")
+                                ev_duration = ev.get("duration")
+                                if ev_node_id and ev_outcome:
+                                    output_collector.record_status_event(
+                                        ev_node_id, ev_outcome, ev_duration
+                                    )
+                                    yield json.dumps(
+                                        {
+                                            "type": "test_status",
+                                            "node_id": ev_node_id,
+                                            "outcome": ev_outcome,
+                                            "duration": ev_duration,
+                                        }
+                                    )
+                            except Exception:
+                                pass
+                        cleaned_line = PYTESTDECK_EVENT_PATTERN.sub("", line_str)
+                        if not cleaned_line.strip():
+                            continue
+                        line_str = cleaned_line
 
-                output_collector.process_line(line_str)
-                yield json.dumps({"type": "stdout", "data": line_str})
+                    output_collector.process_line(line_str)
+                    yield json.dumps({"type": "stdout", "data": line_str})
+            finally:
+                if read_task is not None and not read_task.done():
+                    read_task.cancel()
 
 
         exit_code = await self.proc.wait()

@@ -163,3 +163,30 @@ async def test_subprocess_runner_service_xdist_streams_test_status_events(tmp_pa
     assert outcomes_by_node.get("tests/test_parallel.py::test_skip_three") == "skipped"
 
 
+@pytest.mark.anyio
+async def test_subprocess_runner_service_emits_ping_heartbeat_during_silent_test(tmp_path):
+    """Verifies that run_test_stream emits periodic ping heartbeats while waiting on silent tests."""
+    import json
+
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_silent.py"
+    test_file.write_text(
+        "import time\n"
+        "def test_silent_sleep():\n"
+        "    time.sleep(0.25)\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    runner = SubprocessRunnerService(str(tmp_path), heartbeat_interval=0.05)
+    chunks = []
+    async for raw_chunk in runner.run_test_stream(nodes=["tests/test_silent.py"]):
+        chunks.append(json.loads(raw_chunk))
+
+    ping_chunks = [c for c in chunks if c.get("type") == "ping"]
+    assert len(ping_chunks) >= 1
+    assert any(c.get("type") == "finished" for c in chunks)
+
+
+

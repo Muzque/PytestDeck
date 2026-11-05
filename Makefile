@@ -46,11 +46,11 @@ build-frontend: ## Build Vue 3 frontend SPA
 
 run: build-frontend ## Run PytestDeck server locally
 	@echo "Starting PytestDeck Server..."
-	cd backend && PYTHONPATH=src uv run uvicorn app:app --port $(or $(PORT),9388) $(ENV_ARG) $(if $(RELOAD),--reload,)
+	cd backend && PYTHONPATH=src uv run uvicorn app:app --port $(or $(PORT),9388) --ws-ping-interval 30 --ws-ping-timeout 120 $(ENV_ARG) $(if $(RELOAD),--reload --reload-dir src,)
 
 dev: build-frontend ## Run PytestDeck in development mode with auto-reload
 	@echo "Starting PytestDeck Dev Server with auto-reload..."
-	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --port $(or $(PORT),9388) $(ENV_ARG)
+	cd backend && PYTHONPATH=src uv run uvicorn app:app --reload --reload-dir src --port $(or $(PORT),9388) --ws-ping-interval 30 --ws-ping-timeout 120 $(ENV_ARG)
 
 stop: ## Stop the locally running PytestDeck dev server (macOS and Linux)
 	@echo "Stopping PytestDeck Dev Server on port $(or $(PORT),9388)..."
