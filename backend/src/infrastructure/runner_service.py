@@ -1,12 +1,16 @@
 import asyncio
 import json
 import os
+import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from domain.models import BehaveConfig, PytestConfig, RunnerType
 from domain.services import is_safe_subpath
 from infrastructure.env_status import apply_target_venv, ensure_target_env_ready
+
+PYTESTDECK_EVENT_PATTERN = re.compile(r"__PYTESTDECK_EVENT__:(\{[^\r\n]+\})\r?\n?")
+
 
 
 class SubprocessRunnerService:
@@ -100,6 +104,15 @@ class SubprocessRunnerService:
             src_paths.append(existing_pythonpath)
         env["PYTHONPATH"] = os.pathsep.join(src_paths)
 
+        if resolved_runner_type == RunnerType.PYTEST:
+            existing_addopts = env.get("PYTEST_ADDOPTS", "").strip()
+            plugin_flag = "-p infrastructure.pytest_status_plugin"
+            if plugin_flag not in existing_addopts:
+                env["PYTEST_ADDOPTS"] = (
+                    f"{existing_addopts} {plugin_flag}".strip()
+                )
+
+
         from infrastructure.output_splitter import MethodOutputCollector
         from infrastructure.storage_service import get_target_git_branch
 
@@ -125,8 +138,35 @@ class SubprocessRunnerService:
                 if not line:
                     break
                 line_str = line.decode("utf-8", errors="replace")
+                if "__PYTESTDECK_EVENT__:" in line_str:
+                    for match in PYTESTDECK_EVENT_PATTERN.finditer(line_str):
+                        try:
+                            ev = json.loads(match.group(1))
+                            ev_node_id = ev.get("node_id", "")
+                            ev_outcome = ev.get("outcome", "")
+                            ev_duration = ev.get("duration")
+                            if ev_node_id and ev_outcome:
+                                output_collector.record_status_event(
+                                    ev_node_id, ev_outcome, ev_duration
+                                )
+                                yield json.dumps(
+                                    {
+                                        "type": "test_status",
+                                        "node_id": ev_node_id,
+                                        "outcome": ev_outcome,
+                                        "duration": ev_duration,
+                                    }
+                                )
+                        except Exception:
+                            pass
+                    cleaned_line = PYTESTDECK_EVENT_PATTERN.sub("", line_str)
+                    if not cleaned_line.strip():
+                        continue
+                    line_str = cleaned_line
+
                 output_collector.process_line(line_str)
                 yield json.dumps({"type": "stdout", "data": line_str})
+
 
         exit_code = await self.proc.wait()
 

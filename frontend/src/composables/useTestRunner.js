@@ -566,7 +566,21 @@ export function useTestRunner() {
         }
       }
 
+      // Check for pytest-xdist worker result line (e.g. "[gw0] PASSED path/to/test.py::test_func")
+      const xdistMatch = stripped.match(/^\[gw\d+\]\s+(?:\[\s*\d+%\]\s+)?(PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s+(.+)$/)
+      if (xdistMatch) {
+        const out = mapPytestToken(xdistMatch[1])
+        const parsedXdist = extractPytestNodeId(xdistMatch[2].trim())
+        if (out && parsedXdist) {
+          applyLiveOutcome(parsedXdist.nodeId, out, null)
+          currentLiveNodeId = null
+          currentLiveNodeStartTime = null
+          continue
+        }
+      }
+
       // Check for Pytest test node line (e.g. "path/to/test.py::test_func ...")
+
       const isSectionBanner = /^={3,}\s+.+\s+={3,}$/.test(stripped)
       if (
         !isSectionBanner &&
@@ -858,7 +872,16 @@ export function useTestRunner() {
                 liveMethodRun.value.output += msg.data
               }
             }
+          } else if (msg.type === 'test_status') {
+            if (msg.node_id && msg.outcome) {
+              applyLiveOutcome(
+                msg.node_id,
+                msg.outcome,
+                msg.duration !== undefined ? msg.duration : null
+              )
+            }
           } else if (msg.type === 'finished') {
+
             isRunning.value = false
             exitCode.value = msg.exit_code
             summary.value = msg.summary

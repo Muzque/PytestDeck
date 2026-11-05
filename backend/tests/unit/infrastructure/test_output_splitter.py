@@ -292,3 +292,20 @@ def test_merge_json_report_normalizes_xfailed_and_xpassed():
     assert res["tests/unit/test_slow.py::test_xpass"]["outcome"] == "passed"
 
 
+def test_method_output_collector_xdist_and_status_events():
+    collector = MethodOutputCollector()
+    collector.process_line("tests/unit/test_calc.py::test_add[1 + 2 = 3 (positive)] \n")
+    collector.process_line("tests/unit/test_calc.py::test_sub \n")
+    collector.process_line("[gw0] PASSED tests/unit/test_calc.py::test_add[1 + 2 = 3 (positive)] \n")
+    collector.process_line("[gw1] [100%] FAILED tests/unit/test_calc.py::test_sub \n")
+    collector.record_status_event("tests/unit/test_calc.py::test_add[1 + 2 = 3 (positive)]", "passed", 0.0123)
+    collector.record_status_event("tests/unit/test_calc.py::test_sub", "failed", 0.0456)
+
+    res = collector.get_results()
+    assert res["tests/unit/test_calc.py::test_add[1 + 2 = 3 (positive)]"]["outcome"] == "passed"
+    assert res["tests/unit/test_calc.py::test_add[1 + 2 = 3 (positive)]"]["duration"] == 0.0123
+    assert res["tests/unit/test_calc.py::test_sub"]["outcome"] == "failed"
+    assert res["tests/unit/test_calc.py::test_sub"]["duration"] == 0.0456
+
+
+

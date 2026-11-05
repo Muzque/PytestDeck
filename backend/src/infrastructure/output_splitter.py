@@ -4,7 +4,11 @@ from typing import Any
 
 ANSI_ESCAPE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 PYTEST_NODE_PREFIX_PATTERN = re.compile(r"^([a-zA-Z0-9_\-\./\\]+\.py::[a-zA-Z0-9_\-\.:]+)(.*)$")
+XDIST_LINE_PATTERN = re.compile(
+    r"^\[gw\d+\]\s+(?:\[\s*\d+%\]\s+)?(PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)\s+(.+)$"
+)
 BEHAVE_SCENARIO_PATTERN = re.compile(r"^(?:Scenario|Scenario Outline):\s*(.*?)(?:\s+#\s*([^\s:]+\.feature)(?::\d+)?)?$")
+
 BEHAVE_FEATURE_PATTERN = re.compile(r"^Feature:\s*(.*?)(?:\s+#\s*([^\s:]+\.feature)(?::\d+)?)?$")
 BEHAVE_STEP_DURATION_PATTERN = re.compile(r"#\s+\S+:\d+\s+(\d+(?:\.\d+)?)s\s*$")
 
@@ -143,6 +147,23 @@ class MethodOutputCollector:
             self.method_outputs[node_id]["lines"].append(raw_line)
             return
 
+        # Check for pytest-xdist worker result line (e.g. "[gw0] PASSED path/to/test.py::test_func")
+        xdist_match = XDIST_LINE_PATTERN.match(stripped)
+        if xdist_match:
+            status_token, rest_text = xdist_match.group(1), xdist_match.group(2)
+            node_id = _extract_pytest_node_id(rest_text)
+            if node_id:
+                self._ensure_node(node_id)
+                self.method_outputs[node_id]["lines"].append(raw_line)
+                if status_token in ("PASSED", "XPASS"):
+                    self.method_outputs[node_id]["outcome"] = "passed"
+                elif status_token in ("FAILED", "ERROR"):
+                    self.method_outputs[node_id]["outcome"] = "failed"
+                elif status_token in ("SKIPPED", "XFAIL"):
+                    self.method_outputs[node_id]["outcome"] = "skipped"
+                return
+
+
         # Check for Pytest test method start line (e.g. "path/to/test.py::test_func ...")
         if not stripped.startswith(("=", "-", "rootdir:", "cachedir:", "plugins:")) and not clean.startswith("FAILURES"):
             node_id = _extract_pytest_node_id(clean)
@@ -220,7 +241,41 @@ class MethodOutputCollector:
             elif "SKIPPED" in clean and self.method_outputs[self.current_node]["outcome"] == "unknown":
                 self.method_outputs[self.current_node]["outcome"] = "skipped"
 
+    def record_status_event(
+        self,
+        node_id: str,
+        outcome: str,
+        duration: float | None = None,
+    ) -> None:
+        """Records a structured lifecycle event from the pytest status plugin."""
+        if not node_id or not outcome:
+            return
+        matched_key = node_id if node_id in self.method_outputs else None
+        if not matched_key:
+            candidates = [
+                k
+                for k in self.method_outputs
+                if _is_same_test_node_at_path_boundary(k, node_id)
+            ]
+            if candidates:
+                candidates.sort(key=lambda k: abs(len(k) - len(node_id)))
+                matched_key = candidates[0]
+                if len(node_id) > len(matched_key):
+                    entry = self.method_outputs.pop(matched_key)
+                    entry["node_id"] = node_id
+                    self.method_outputs[node_id] = entry
+                    matched_key = node_id
+        if not matched_key:
+            self._ensure_node(node_id)
+            matched_key = node_id
+
+        if outcome != "running":
+            self.method_outputs[matched_key]["outcome"] = outcome
+        if duration is not None:
+            self.method_outputs[matched_key]["duration"] = round(float(duration), 4)
+
     def merge_json_report(self, report_data: dict[str, Any]) -> None:
+
         """Enriches recorded method outputs with durations and outcomes from pytest JSON report."""
         if not report_data or not isinstance(report_data, dict):
             return
