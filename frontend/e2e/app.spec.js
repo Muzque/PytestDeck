@@ -1092,7 +1092,69 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
       fs.rmSync(dotGitDir, { recursive: true, force: true })
     }
   })
+
+  test('should count only selected function nodes in Run Selected button and Clear Selection tooltip', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const runBtn = page.locator('.btn-run-selected')
+    const clearBtn = page.locator('#btn-clear-selection')
+
+    await expect(runBtn).toContainText('Run Selected (0)')
+    await expect(clearBtn).toBeDisabled()
+    await expect(clearBtn).toHaveAttribute('title', 'Clear selections (none selected)')
+
+    // 1. Expand test_slow_and_classes.py and select a single function -> count is 1
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+    await slowFileRow.locator('.toggle-icon').click()
+    const singleFuncRow = page.locator('.node-row:has-text("test_long_running_pipeline")')
+    await singleFuncRow.locator('.node-checkbox').click()
+
+
+    await expect(runBtn).toContainText('Run Selected (1)')
+    await expect(clearBtn).toBeEnabled()
+    await expect(clearBtn).toHaveAttribute('title', 'Clear 1 selected test')
+
+    await clearBtn.click()
+    await expect(runBtn).toContainText('Run Selected (0)')
+
+    // 2. Select a class (TestClassWithSlowSetup has 2 functions) -> count is 2 (not 3)
+    const slowClassRow = page.locator('.node-row:has-text("TestClassWithSlowSetup")')
+    await slowClassRow.locator('.node-checkbox').click()
+
+    await expect(runBtn).toContainText('Run Selected (2)')
+    await expect(clearBtn).toHaveAttribute('title', 'Clear 2 selected tests')
+
+    await clearBtn.click()
+
+    // 3. Select a file (test_calculator.py has 11 functions) -> count is 11 (not 12)
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+
+    await expect(runBtn).toContainText('Run Selected (11)')
+    await expect(clearBtn).toHaveAttribute('title', 'Clear 11 selected tests')
+
+    // Expand test_calculator.py and uncheck 1 function -> count decreases by 1 to 10
+    await calcFileRow.locator('.toggle-icon').click()
+    const addFuncRow = page.locator('.node-row:has-text("test_add")').first()
+    await addFuncRow.locator('.node-checkbox').click()
+
+    await expect(runBtn).toContainText('Run Selected (10)')
+    await expect(clearBtn).toHaveAttribute('title', 'Clear 10 selected tests')
+
+    await clearBtn.click()
+
+    // 4. Select entire root directory (tests/unit has 29 functions total) -> count is 29
+    const rootDirRow = page.locator('.node-row:has(.type-badge.directory)').first()
+    await rootDirRow.locator('.node-checkbox').click()
+
+    await expect(runBtn).toContainText('Run Selected (29)')
+    await expect(clearBtn).toHaveAttribute('title', 'Clear 29 selected tests')
+
+    await clearBtn.click()
+    await expect(runBtn).toContainText('Run Selected (0)')
+  })
 })
+
 
 
 

@@ -731,6 +731,29 @@ export function useTestRunner() {
     selectedNodes.value = new Set()
   }
 
+  const countSelectedFunctionsInTree = (node, selectedSet) => {
+    if (!node || !selectedSet || selectedSet.size === 0) return 0
+    let count = 0
+    const nodeType = (node.type || '').toLowerCase()
+    if ((nodeType === 'function' || nodeType === 'fun') && selectedSet.has(node.id)) {
+      count += 1
+    }
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        count += countSelectedFunctionsInTree(child, selectedSet)
+      }
+    }
+    return count
+  }
+
+  const selectedCount = computed(() => {
+    if (!selectedNodes.value || selectedNodes.value.size === 0 || !testTree.value) {
+      return 0
+    }
+    return countSelectedFunctionsInTree(testTree.value, selectedNodes.value)
+  })
+
+
   const getExecutionNodes = () => {
     const selected = Array.from(selectedNodes.value)
     if (selected.length === 0) {
@@ -1094,7 +1117,9 @@ export function useTestRunner() {
     envStatus,
     testTree,
     selectedNodes,
+    selectedCount,
     activeTab,
+
     logs,
     exitCode,
     summary,

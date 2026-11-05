@@ -71,13 +71,14 @@ const activeOptionCount = computed(() =>
         <button
           id="btn-clear-selection"
           class="btn-icon-action btn-clear-selection"
-          :class="{ 'has-selections': selectedCount > 0 }"
-          :disabled="selectedCount === 0 || isRunning"
-          :title="selectedCount > 0 ? `Clear ${selectedCount} selected test${selectedCount > 1 ? 's' : ''}` : 'Clear selections (none selected)'"
+          :class="{ 'has-selections': selectedCount > 0 || selectedNodes.size > 0 }"
+          :disabled="(selectedCount === 0 && selectedNodes.size === 0) || isRunning"
+          :title="selectedCount > 0 ? `Clear ${selectedCount} selected test${selectedCount > 1 ? 's' : ''}` : (selectedNodes.size > 0 ? 'Clear selections' : 'Clear selections (none selected)')"
           @click="emit('clear-selection')"
         >
           <span>🧹</span>
         </button>
+
 
         <button
           id="btn-run-options"
