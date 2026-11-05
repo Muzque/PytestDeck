@@ -173,8 +173,10 @@ watch(() => props.isRunning, (running) => {
   if (!running && !hasSessionStarted && preSessionBuffer.length > 0) {
     preSessionBuffer.forEach(line => term.write(line))
     preSessionBuffer = []
+    term.scrollToBottom()
   }
 })
+
 
 watch(() => props.logs, (newLogs) => {
   if (!term) return
@@ -216,6 +218,8 @@ watch(() => props.logs, (newLogs) => {
           hasSessionStarted = true
           preSessionBuffer = []
           term.write(line)
+        } else if (!props.isRunning) {
+          term.write(line)
         } else {
           preSessionBuffer.push(line)
         }
@@ -223,8 +227,10 @@ watch(() => props.logs, (newLogs) => {
         term.write(line)
       }
     }
+    term.scrollToBottom()
   }
 }, { deep: true })
+
 
 watch(currentTerminalTheme, (newThemeId) => {
   applyTerminalTheme(newThemeId)
