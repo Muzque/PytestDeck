@@ -1314,6 +1314,67 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
       }
     }
   })
+
+  test('should stop gracefully and never auto-rerun when WebSocket disconnects mid-run', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Track WebSocket connections and force-close the active connection mid-run
+    await page.evaluate(() => {
+      window.__wsConnectCount = 0
+      window.__activeTestWs = null
+      const OrigWebSocket = window.WebSocket
+      window.WebSocket = function (url, protocols) {
+        if (String(url).includes('/ws/run')) {
+          window.__wsConnectCount += 1
+        }
+        const instance = protocols ? new OrigWebSocket(url, protocols) : new OrigWebSocket(url)
+        if (String(url).includes('/ws/run')) {
+          window.__activeTestWs = instance
+        }
+        return instance
+      }
+      window.WebSocket.prototype = OrigWebSocket.prototype
+      Object.assign(window.WebSocket, OrigWebSocket)
+    })
+
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+    await slowFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(slowFileRow).toHaveClass(/row-has-running/)
+
+    // Inject a ping keepalive message and then simulate an unexpected WebSocket drop
+    await page.evaluate(() => {
+      const sock = window.__activeTestWs
+      if (sock && typeof sock.onmessage === 'function') {
+        sock.onmessage({ data: JSON.stringify({ type: 'ping' }) })
+      }
+      if (sock) {
+        if (typeof sock.onerror === 'function') {
+          sock.onerror(new Event('error'))
+        }
+        sock.close()
+      }
+    })
+
+    // Run must immediately stop without retrying or re-running
+    await expect(stopBtn).not.toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.btn-primary')).toBeVisible()
+    await expect(slowFileRow).not.toHaveClass(/row-has-running/)
+
+    const xtermRows = page.locator('.terminal-container .xterm-rows')
+    await expect(xtermRows).toContainText('[ERROR] WebSocket connection lost during test execution.')
+    const terminalText = await xtermRows.innerText()
+    expect(terminalText).not.toContain('Retrying (')
+    expect(terminalText).not.toContain('"type":"ping"')
+
+    // Wait longer than the old retry backoff (1000ms) and verify no reconnect / auto-rerun occurred
+    await page.waitForTimeout(1500)
+    const connectCount = await page.evaluate(() => window.__wsConnectCount)
+    expect(connectCount).toBe(1)
+  })
 })
 
 

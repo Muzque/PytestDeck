@@ -97,3 +97,42 @@ def test_ws_run_behave_streaming_sequential_steps():
     assert not any(f"\x1b[{i}A" in line for i in range(1, 10) for line in stdout_lines)
 
 
+def test_ws_run_emits_ping_keepalive_during_silent_execution(tmp_path, monkeypatch):
+    """Verifies that /ws/run forwards server-side ping keepalive messages during silent test runs."""
+    from infrastructure.runner_service import SubprocessRunnerService
+
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_slow.py"
+    test_file.write_text(
+        "import time\n"
+        "def test_slow_case():\n"
+        "    time.sleep(0.2)\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    orig_init = SubprocessRunnerService.__init__
+
+    def fast_heartbeat_init(self, target_path: str, heartbeat_interval: float = 0.05):
+        orig_init(self, target_path, heartbeat_interval=heartbeat_interval)
+
+    monkeypatch.setattr(SubprocessRunnerService, "__init__", fast_heartbeat_init)
+
+    with client.websocket_connect("/ws/run") as websocket:
+        websocket.send_json({
+            "action": "START",
+            "target_path": str(tmp_path),
+            "nodes": ["tests/test_slow.py"],
+        })
+        messages = []
+        while True:
+            msg = websocket.receive_json()
+            messages.append(msg)
+            if msg.get("type") == "finished":
+                break
+
+    assert any(m.get("type") == "ping" for m in messages)
+
+
+

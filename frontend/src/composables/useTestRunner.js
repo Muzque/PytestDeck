@@ -923,15 +923,23 @@ export function useTestRunner() {
       methodOutputs.value = nextOutputs
     }
 
-    let retries = 0
-    const maxRetries = 3
+    let runSettled = false
+
+    const handleUnexpectedDisconnect = () => {
+      if (runSettled) return
+      runSettled = true
+      appendLog('\r\n\x1b[1;31m[ERROR] WebSocket connection lost during test execution.\x1b[0m\r\n')
+      isRunning.value = false
+      liveMethodRun.value = null
+      restoreRunningOutputs()
+      ws = null
+    }
 
     const connectWebSocket = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       ws = new WebSocket(`${protocol}//${window.location.host}/ws/run`)
 
       ws.onopen = () => {
-        retries = 0
         const nodesToRun = getExecutionNodes()
         const payload = {
           action: 'START',
@@ -946,7 +954,9 @@ export function useTestRunner() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data)
-          if (msg.type === 'stdout' || msg.type === 'status') {
+          if (msg.type === 'ping') {
+            return
+          } else if (msg.type === 'stdout' || msg.type === 'status') {
             appendLog(msg.data)
             if (msg.type === 'stdout') {
               processLiveStdoutChunk(msg.data)
@@ -974,7 +984,7 @@ export function useTestRunner() {
               )
             }
           } else if (msg.type === 'finished') {
-
+            runSettled = true
             isRunning.value = false
             exitCode.value = msg.exit_code
             summary.value = msg.summary
@@ -1051,6 +1061,7 @@ export function useTestRunner() {
             runHistory.value.unshift(historyRecord)
             selectedHistoryId.value = historyRecord.id
           } else if (msg.type === 'error') {
+            runSettled = true
             appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
             isRunning.value = false
             liveMethodRun.value = null
@@ -1064,25 +1075,11 @@ export function useTestRunner() {
 
       ws.onerror = (err) => {
         console.error('WebSocket connection error:', err)
-        if (retries < maxRetries && isRunning.value) {
-          retries++
-          const delay = Math.pow(2, retries) * 500
-          appendLog(`\x1b[1;33mWebSocket connection error. Retrying (${retries}/${maxRetries}) in ${delay}ms...\x1b[0m\r\n`)
-          setTimeout(connectWebSocket, delay)
-        } else {
-          appendLog('\x1b[1;31mWebSocket Connection Error: Max retries reached.\x1b[0m\r\n')
-          isRunning.value = false
-          liveMethodRun.value = null
-          restoreRunningOutputs()
-        }
+        handleUnexpectedDisconnect()
       }
 
       ws.onclose = () => {
-        if (retries === 0 || retries >= maxRetries) {
-          isRunning.value = false
-          liveMethodRun.value = null
-          restoreRunningOutputs()
-        }
+        handleUnexpectedDisconnect()
       }
     }
 
