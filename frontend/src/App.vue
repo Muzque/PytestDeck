@@ -21,7 +21,9 @@ const {
   fetchEnvLogs,
   testTree,
   selectedNodes,
+  selectedCount,
   activeTab,
+
   logs,
   exitCode,
   summary,
@@ -71,8 +73,9 @@ const { activeTooltip } = useTooltip()
         :activeSuite="activeSuite"
         :isDiscovering="isDiscovering"
         :isRunning="isRunning"
-        :selectedCount="selectedNodes.size"
+        :selectedCount="selectedCount"
         v-model:markerFilter="markerFilter"
+
         v-model:extraArgs="extraArgs"
         :testTree="testTree"
         :selectedNodes="selectedNodes"
