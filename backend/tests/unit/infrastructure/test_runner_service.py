@@ -121,3 +121,45 @@ async def test_subprocess_runner_service_abort_running_process(tmp_path):
     runner.proc = mock_proc
     await runner.abort()  # Should handle exception silently
 
+
+@pytest.mark.anyio
+async def test_subprocess_runner_service_xdist_streams_test_status_events(tmp_path):
+    """Verifies that running pytest with xdist (-n 2) streams real-time test_status events without leaking markers to stdout."""
+    import json
+
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_parallel.py"
+    test_file.write_text(
+        "import pytest\n"
+        "def test_pass_one(): assert True\n"
+        "def test_fail_two(): assert False\n"
+        "@pytest.mark.skip(reason='skip')\n"
+        "def test_skip_three(): pass\n",
+        encoding="utf-8",
+    )
+
+    runner = SubprocessRunnerService(str(tmp_path))
+    chunks = []
+    async for raw_chunk in runner.run_test_stream(
+        nodes=["tests/test_parallel.py"],
+        extra_args=["-n", "2"],
+    ):
+        chunks.append(json.loads(raw_chunk))
+
+    stdout_chunks = [c["data"] for c in chunks if c["type"] == "stdout"]
+    assert not any("__PYTESTDECK_EVENT__" in s for s in stdout_chunks)
+
+    status_events = [c for c in chunks if c["type"] == "test_status"]
+    assert len(status_events) >= 3
+
+    outcomes_by_node = {}
+    for ev in status_events:
+        if ev["outcome"] != "running":
+            outcomes_by_node[ev["node_id"]] = ev["outcome"]
+
+    assert outcomes_by_node.get("tests/test_parallel.py::test_pass_one") == "passed"
+    assert outcomes_by_node.get("tests/test_parallel.py::test_fail_two") == "failed"
+    assert outcomes_by_node.get("tests/test_parallel.py::test_skip_three") == "skipped"
+
+

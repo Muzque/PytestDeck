@@ -1176,6 +1176,53 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await clearBtn.click()
     await expect(runBtn).toContainText('Run Selected (0)')
   })
+
+  test('should update DirectoryTree test status in real time when pytest uses xdist (-n 2)', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Clear test history first so all nodes start as not-run
+    await page.click('#btn-run-options')
+    await page.click('#btn-clear-history')
+    await expect(page.locator('.ro-history-cleared-msg')).toBeVisible()
+
+    // Configure -n 2 for parallel pytest-xdist execution
+    const extraInput = page.locator('#run-options-extra')
+    await extraInput.fill('-n 2')
+    await page.click('#run-options-apply')
+
+    try {
+      const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+      await slowFileRow.locator('.toggle-icon').click()
+
+      const alphaFuncRow = page.locator('.node-row:has-text("test_fixture_case_alpha")')
+      const pipelineFuncRow = page.locator('.node-row:has-text("test_long_running_pipeline")')
+      const skipFuncRow = page.locator('.node-row:has-text("test_intentionally_skipped_case")')
+
+
+      await slowFileRow.locator('.node-checkbox').click()
+      await page.locator('.btn-primary').click()
+
+      const stopBtn = page.locator('.btn-danger')
+      await expect(stopBtn).toBeVisible({ timeout: 5000 })
+
+      // While xdist run is still in progress (stopBtn visible), completed tests must update in real time
+      await expect(alphaFuncRow).toHaveClass(/row-outcome-passed/, { timeout: 10000 })
+      await expect(stopBtn).toBeVisible()
+
+      // Wait for all workers to finish
+      await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+      await expect(alphaFuncRow).toHaveClass(/row-outcome-passed/)
+      await expect(pipelineFuncRow).toHaveClass(/row-outcome-passed/)
+      await expect(skipFuncRow).toHaveClass(/row-outcome-skipped/)
+      await expect(slowFileRow).not.toHaveClass(/row-has-running/)
+    } finally {
+      const clearAllBtn = page.locator('.btn-clear-all')
+      if (await clearAllBtn.isVisible()) {
+        await clearAllBtn.click()
+      }
+    }
+  })
 })
 
 
