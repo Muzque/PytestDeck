@@ -718,6 +718,8 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     const fastFuncRow = page.locator('.node-row:has-text("test_query_fast_one")')
     const slowFuncRow = page.locator('.node-row:has-text("test_long_running_pipeline")')
     await expect(slowFuncRow).toHaveClass(/row-outcome-running/)
+    const runningAnimName = await slowFuncRow.evaluate(el => window.getComputedStyle(el).animationName)
+    expect(runningAnimName).toBe('none')
 
     // While test_long_running_pipeline is still running, earlier test_query_fast_one updates to passed on the fly
     await expect(fastFuncRow).toHaveClass(/row-outcome-passed/, { timeout: 5000 })

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useTooltip } from '../composables/useTooltip'
+import { findNodeRecord } from '../composables/nodeLookup'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -46,41 +47,6 @@ const isFunctionNode = computed(() => {
     (props.node.id && props.node.id.includes('::') && (!props.node.children || props.node.children.length === 0))
   )
 })
-
-const isSameTestNodeId = (idA, idB) => {
-  if (!idA || !idB) return false
-  const normA = idA.replace(/\\/g, '/')
-  const normB = idB.replace(/\\/g, '/')
-  if (normA === normB) return true
-  const sepA = normA.indexOf('::')
-  const sepB = normB.indexOf('::')
-  if (sepA === -1 || sepB === -1) {
-    return normA.endsWith('/' + normB) || normB.endsWith('/' + normA)
-  }
-  const tailA = normA.slice(sepA)
-  const tailB = normB.slice(sepB)
-  if (tailA !== tailB) return false
-  const fileA = normA.slice(0, sepA)
-  const fileB = normB.slice(0, sepB)
-  return fileA === fileB || fileA.endsWith('/' + fileB) || fileB.endsWith('/' + fileA)
-}
-
-const findNodeRecord = (outputs, id) => {
-  if (!id || !outputs) return null
-  if (outputs[id]) return outputs[id]
-  let bestKey = null
-  let bestDiff = Infinity
-  for (const key of Object.keys(outputs)) {
-    if (outputs[key] && isSameTestNodeId(id, key)) {
-      const diff = Math.abs(id.length - key.length)
-      if (diff < bestDiff) {
-        bestDiff = diff
-        bestKey = key
-      }
-    }
-  }
-  return bestKey ? outputs[bestKey] : null
-}
 
 const nodeRecord = computed(() => {
   if (!isFunctionNode.value) return null
@@ -355,25 +321,12 @@ const onChildToggleSelect = (targetNode) => {
 .node-row.row-outcome-running,
 .node-row.row-has-running {
   border-left-color: var(--accent-blue);
-  background: rgba(56, 189, 248, 0.14);
-  box-shadow: inset 3px 0 10px -2px rgba(56, 189, 248, 0.45);
-  animation: pulse-running-row 1.4s infinite ease-in-out;
+  background: rgba(56, 189, 248, 0.10);
 }
 
 .node-row.is-selected.row-outcome-running,
 .node-row.is-selected.row-has-running {
-  background: rgba(56, 189, 248, 0.22);
-}
-
-@keyframes pulse-running-row {
-  0%, 100% {
-    border-left-color: var(--accent-blue);
-    background: rgba(56, 189, 248, 0.16);
-  }
-  50% {
-    border-left-color: rgba(56, 189, 248, 0.45);
-    background: rgba(56, 189, 248, 0.06);
-  }
+  background: rgba(56, 189, 248, 0.20);
 }
 
 .toggle-icon {
