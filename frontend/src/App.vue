@@ -15,6 +15,7 @@ const {
   availableSuites,
   isDiscovering,
   isRunning,
+  liveRunProgress,
   envStatus,
   envLogs,
   showEnvLogModal,
@@ -148,7 +149,7 @@ const { activeTooltip } = useTooltip()
         <div class="tab-content">
           <!-- Terminal Output Tab -->
           <div v-show="activeTab === 'live'" class="tab-pane">
-            <TerminalView :logs="logs" :isRunning="isRunning" />
+            <TerminalView :logs="logs" :isRunning="isRunning" :liveProgress="liveRunProgress" />
           </div>
 
           <!-- Detail Info Tab -->

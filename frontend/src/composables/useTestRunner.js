@@ -485,8 +485,16 @@ export function useTestRunner() {
 
   const runHistory = ref([])
   const selectedHistoryId = ref(null)
+  const liveRunProgress = ref({
+    total: 0,
+    completed: 0,
+    passed: 0,
+    failed: 0,
+    skipped: 0
+  })
 
   let ws = null
+  let activeRunOutcomes = new Map()
   let currentRunStartTime = null
   let preRunMethodOutputs = null
   let currentLiveNodeId = null
@@ -536,10 +544,49 @@ export function useTestRunner() {
     }
   }
 
+  const normalizeProgressBucket = (rawOutcome) => {
+    if (!rawOutcome) return null
+    const lower = String(rawOutcome).toLowerCase()
+    if (lower === 'passed' || lower === 'xpassed' || lower === 'xpass') return 'passed'
+    if (lower === 'failed' || lower === 'error') return 'failed'
+    if (lower === 'skipped' || lower === 'xfailed' || lower === 'xfail') return 'skipped'
+    if (lower === 'running') return 'running'
+    return null
+  }
+
+  const updateLiveRunProgress = (targetKey, outcome) => {
+    const nextBucket = normalizeProgressBucket(outcome)
+    if (!nextBucket) return
+    const prevBucket = activeRunOutcomes.get(targetKey)
+    if (prevBucket === nextBucket) return
+    let { total, passed, failed, skipped } = liveRunProgress.value
+    if (!activeRunOutcomes.has(targetKey)) {
+      total += 1
+    }
+    if (prevBucket === 'passed') passed = Math.max(0, passed - 1)
+    else if (prevBucket === 'failed') failed = Math.max(0, failed - 1)
+    else if (prevBucket === 'skipped') skipped = Math.max(0, skipped - 1)
+
+    if (nextBucket === 'passed') passed += 1
+    else if (nextBucket === 'failed') failed += 1
+    else if (nextBucket === 'skipped') skipped += 1
+
+    activeRunOutcomes.set(targetKey, nextBucket)
+    liveRunProgress.value = {
+      total,
+      completed: passed + failed + skipped,
+      passed,
+      failed,
+      skipped
+    }
+  }
+
   const applyLiveOutcome = (nodeId, outcome, duration = null) => {
     if (!nodeId || !outcome) return
     const current = methodOutputs.value
     const bestKey = findNodeKey(current, nodeId)
+    const targetKey = bestKey || nodeId
+    updateLiveRunProgress(targetKey, outcome)
     if (bestKey) {
       const existing = current[bestKey]
       const nextDuration = duration !== null ? duration : existing?.duration ?? null
@@ -937,29 +984,27 @@ export function useTestRunner() {
     if (runningLeafIds.size === 0 && !runAll) {
       selectedNodes.value.forEach(id => runningLeafIds.add(id))
     }
+    activeRunOutcomes = new Map()
     if (runningLeafIds.size > 0) {
       const nextOutputs = { ...preRunMethodOutputs }
       for (const leafId of runningLeafIds) {
-        let matchedExisting = false
-        for (const key of Object.keys(nextOutputs)) {
-          if (key === leafId || leafId.endsWith(key) || key.endsWith(leafId)) {
-            nextOutputs[key] = {
-              ...nextOutputs[key],
-              outcome: 'running',
-              duration: null
-            }
-            matchedExisting = true
-          }
+        const existingKey = findNodeKey(preRunMethodOutputs, leafId)
+        const targetKey = existingKey || leafId
+        nextOutputs[targetKey] = {
+          ...(nextOutputs[targetKey] || { node_id: targetKey }),
+          outcome: 'running',
+          duration: null
         }
-        if (!matchedExisting) {
-          nextOutputs[leafId] = {
-            node_id: leafId,
-            outcome: 'running',
-            duration: null
-          }
-        }
+        activeRunOutcomes.set(targetKey, 'running')
       }
       methodOutputs.value = nextOutputs
+    }
+    liveRunProgress.value = {
+      total: activeRunOutcomes.size,
+      completed: 0,
+      passed: 0,
+      failed: 0,
+      skipped: 0
     }
 
     let runSettled = false
@@ -1293,6 +1338,7 @@ export function useTestRunner() {
     availableSuites,
     isDiscovering,
     isRunning,
+    liveRunProgress,
     envStatus,
     testTree,
     selectedNodes,

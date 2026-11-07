@@ -7,8 +7,34 @@ import { TERMINAL_THEMES, useTheme } from '../composables/useTheme'
 
 const props = defineProps({
   logs: { type: Array, default: () => [] },
-  isRunning: { type: Boolean, default: false }
+  isRunning: { type: Boolean, default: false },
+  liveProgress: {
+    type: Object,
+    default: () => ({ total: 0, completed: 0, passed: 0, failed: 0, skipped: 0 })
+  }
 })
+
+const elapsedText = ref('0.0s')
+let elapsedTimer = null
+let runStartMs = 0
+
+const startElapsedTimer = () => {
+  stopElapsedTimer()
+  runStartMs = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  elapsedText.value = '0.0s'
+  elapsedTimer = setInterval(() => {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const sec = Math.max(0, (now - runStartMs) / 1000)
+    elapsedText.value = `${sec.toFixed(1)}s`
+  }, 100)
+}
+
+const stopElapsedTimer = () => {
+  if (elapsedTimer) {
+    clearInterval(elapsedTimer)
+    elapsedTimer = null
+  }
+}
 
 const { currentTerminalTheme, terminalThemes, currentTerminalFont, terminalFonts } = useTheme()
 
@@ -161,6 +187,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopElapsedTimer()
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
@@ -170,12 +197,17 @@ onUnmounted(() => {
 })
 
 watch(() => props.isRunning, (running) => {
+  if (running) {
+    startElapsedTimer()
+  } else {
+    stopElapsedTimer()
+  }
   if (!running && !hasSessionStarted && preSessionBuffer.length > 0) {
     preSessionBuffer.forEach(line => term.write(line))
     preSessionBuffer = []
     term.scrollToBottom()
   }
-})
+}, { immediate: true })
 
 
 watch(() => props.logs, (newLogs) => {
@@ -252,6 +284,23 @@ watch(currentTerminalFont, (newFontId) => {
         <span class="dot dot-yellow"></span>
         <span class="dot dot-green"></span>
         <span class="terminal-title">Terminal Output</span>
+        <div v-if="props.isRunning" class="terminal-live-counter">
+          <span class="counter-progress">
+            ⏳ {{ props.liveProgress?.completed ?? 0 }} / {{ props.liveProgress?.total ?? 0 }}
+          </span>
+          <span v-if="props.liveProgress?.passed > 0" class="counter-chip passed">
+            {{ props.liveProgress.passed }} ✓
+          </span>
+          <span v-if="props.liveProgress?.failed > 0" class="counter-chip failed">
+            {{ props.liveProgress.failed }} ✗
+          </span>
+          <span v-if="props.liveProgress?.skipped > 0" class="counter-chip skipped">
+            {{ props.liveProgress.skipped }} –
+          </span>
+          <span class="counter-timer">
+            ⏱ {{ elapsedText }}
+          </span>
+        </div>
       </div>
       <div class="terminal-actions">
         <button
@@ -325,6 +374,54 @@ watch(currentTerminalFont, (newFontId) => {
   font-weight: 600;
   color: var(--text-muted);
   margin-left: 6px;
+}
+
+.terminal-live-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.10);
+  border: 1px solid rgba(56, 189, 248, 0.30);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.counter-progress {
+  color: var(--accent-blue);
+}
+
+.counter-chip {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.70rem;
+}
+
+.counter-chip.passed {
+  background: rgba(52, 211, 153, 0.16);
+  color: var(--accent-green);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.counter-chip.failed {
+  background: rgba(248, 113, 113, 0.18);
+  color: var(--accent-red);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.counter-chip.skipped {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.counter-timer {
+  color: var(--text-muted);
+  padding-left: 4px;
+  border-left: 1px solid var(--border-color);
 }
 
 .terminal-actions {
