@@ -75,3 +75,21 @@ async def test_pytest_discovery_service_collection_error(tmp_path):
     (tmp_path / "pytest.ini").write_text("[pytest]\naddopts = --invalid-option-flag-xyz\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Pytest test collection failed"):
         await service.collect_raw(str(tmp_path), suite_rel_path="tests/unit")
+
+
+@pytest.mark.anyio
+async def test_pytest_discovery_service_timeout_terminates_subprocess(tmp_path):
+    """Verifies that a hanging discovery subprocess times out and is terminated cleanly."""
+    suite_dir = tmp_path / "tests" / "unit"
+    suite_dir.mkdir(parents=True)
+    (suite_dir / "test_hang.py").write_text(
+        "import time\n"
+        "time.sleep(5)\n"
+        "def test_never_reached(): pass\n",
+        encoding="utf-8",
+    )
+
+    service = PytestDiscoveryService(timeout=0.2)
+    with pytest.raises(ValueError, match="timed out"):
+        await service.collect_raw(str(tmp_path), suite_rel_path="tests/unit")
+

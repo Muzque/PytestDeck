@@ -10,6 +10,26 @@ from domain.services import is_safe_subpath
 from infrastructure.env_status import apply_target_venv, ensure_target_env_ready
 
 PYTESTDECK_EVENT_PATTERN = re.compile(r"__PYTESTDECK_EVENT__:(\{[^\r\n]+\})\r?\n?")
+DEFAULT_STREAM_LIMIT = 1024 * 1024  # 1 MB
+
+
+async def _read_stream_line(stream: asyncio.StreamReader) -> bytes:
+    """Reads a line from an asyncio StreamReader, draining gracefully if the buffer limit is exceeded."""
+    readuntil_fn = getattr(stream, "readuntil", None)
+    if callable(readuntil_fn):
+        try:
+            return await readuntil_fn(b"\n")
+        except asyncio.IncompleteReadError as exc:
+            return exc.partial
+        except asyncio.LimitOverrunError as exc:
+            return await stream.read(max(exc.consumed, 1))
+        except ValueError:
+            return await stream.read(65536)
+    try:
+        return await stream.readline()
+    except (asyncio.LimitOverrunError, ValueError):
+        return await stream.read(65536)
+
 
 
 
@@ -128,6 +148,7 @@ class SubprocessRunnerService:
             stderr=asyncio.subprocess.STDOUT,
             env=env,
             start_new_session=True,
+            limit=DEFAULT_STREAM_LIMIT,
         )
 
         yield json.dumps(
@@ -139,7 +160,7 @@ class SubprocessRunnerService:
             try:
                 while True:
                     if read_task is None:
-                        read_task = asyncio.create_task(self.proc.stdout.readline())
+                        read_task = asyncio.create_task(_read_stream_line(self.proc.stdout))
                     done, _ = await asyncio.wait(
                         {read_task}, timeout=self.heartbeat_interval
                     )
@@ -230,8 +251,11 @@ class SubprocessRunnerService:
 
             db = HistoryDatabase(target_path=self.target_path)
             file_hash_cache: dict[str, str | None] = {}
+            metadata_cache: dict[str, object] = {}
             for nid, record in method_outputs.items():
-                code_hash, file_mtime = get_node_code_metadata(self.target_path, nid)
+                code_hash, file_mtime = get_node_code_metadata(
+                    self.target_path, nid, cache=metadata_cache
+                )
                 rel_file = nid.split("::")[0]
                 if rel_file not in file_hash_cache:
                     full_path = resolve_test_file(Path(self.target_path), rel_file)

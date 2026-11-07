@@ -326,6 +326,48 @@ def test_pytest_status_plugin_reporter_lifecycle(monkeypatch):
     assert registered == ["pytestdeck_status_reporter"]
 
 
+@pytest.mark.anyio
+async def test_subprocess_runner_service_handles_oversized_stdout_line(tmp_path):
+    """Verifies that lines exceeding 64KB default asyncio StreamReader limit do not raise LimitOverrunError."""
+    import json
+
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_big_line.py"
+    test_file.write_text(
+        "def test_emit_huge_line():\n"
+        "    print('X' * 100_000, flush=True)\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    runner = SubprocessRunnerService(str(tmp_path))
+    chunks = []
+    async for raw_chunk in runner.run_test_stream(nodes=["tests/test_big_line.py"], extra_args=["-s"]):
+        chunks.append(json.loads(raw_chunk))
+
+    stdout_text = "".join(c["data"] for c in chunks if c.get("type") == "stdout")
+    assert "X" * 100_000 in stdout_text
+    finished = next(c for c in chunks if c.get("type") == "finished")
+    assert finished["exit_code"] == 0
+
+
+@pytest.mark.anyio
+async def test_read_stream_line_recovers_from_limit_overrun():
+    """Verifies _read_stream_line drains oversized chunk when LimitOverrunError/ValueError occurs."""
+    import asyncio
+
+    from infrastructure.runner_service import _read_stream_line
+
+    reader = asyncio.StreamReader(limit=32)
+    reader.feed_data(b"A" * 100 + b"\n")
+    reader.feed_eof()
+
+    chunk = await _read_stream_line(reader)
+    assert chunk.startswith(b"A" * 32)
+
+
+
 
 
 

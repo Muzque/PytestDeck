@@ -337,6 +337,7 @@ class HistoryDatabase:
 
         stale_nodes: list[str] = []
         file_hash_cache: dict[str, str | None] = {}
+        metadata_cache: dict[str, Any] = {}
 
         for node_id, data in all_runs.items():
             rel_file = node_id.split("::")[0]
@@ -360,13 +361,17 @@ class HistoryDatabase:
                 if curr_file_hash != stored_file_hash:
                     stale_nodes.append(node_id)
             elif stored_code_hash:
-                curr_code_hash, _ = get_node_code_metadata(target_dir, node_id)
+                curr_code_hash, _ = get_node_code_metadata(
+                    target_dir, node_id, cache=metadata_cache
+                )
                 if curr_code_hash != stored_code_hash:
                     stale_nodes.append(node_id)
             else:
                 stored_mtime = data.get("file_mtime")
                 if stored_mtime:
-                    _, curr_mtime = get_node_code_metadata(target_dir, node_id)
+                    _, curr_mtime = get_node_code_metadata(
+                        target_dir, node_id, cache=metadata_cache
+                    )
                     if curr_mtime and curr_mtime > stored_mtime + 1.0:
                         stale_nodes.append(node_id)
 
