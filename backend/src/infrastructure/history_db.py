@@ -11,6 +11,8 @@ from infrastructure.storage_service import (
 )
 
 SUITE_SLOTS: tuple[str, ...] = ("unit", "integration", "acceptance")
+_INITIALIZED_DB_INODES: dict[str, tuple[int, int]] = {}
+
 
 
 def normalize_suite_slot(suite: str | None) -> str:
@@ -44,7 +46,21 @@ class HistoryDatabase:
                 self.db_path = storage_dir / "history.db"
 
         self._ensure_storage_dir()
-        self._init_db()
+        resolved_key = str(self.db_path.resolve())
+        current_inode = self._get_file_identity()
+        if current_inode is None or _INITIALIZED_DB_INODES.get(resolved_key) != current_inode:
+            self._init_db()
+            new_inode = self._get_file_identity()
+            if new_inode is not None:
+                _INITIALIZED_DB_INODES[resolved_key] = new_inode
+
+    def _get_file_identity(self) -> tuple[int, int] | None:
+        """Returns (st_ino, st_ctime_ns) if the database file exists on disk, or None."""
+        try:
+            st = self.db_path.stat()
+            return (st.st_ino, st.st_ctime_ns)
+        except OSError:
+            return None
 
     def get_current_branch(self, target_path: str | Path | None = None) -> str:
         """Resolves the active git branch identifier for the given or configured target path."""
@@ -58,6 +74,8 @@ class HistoryDatabase:
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         return conn
 
     def _init_db(self) -> None:

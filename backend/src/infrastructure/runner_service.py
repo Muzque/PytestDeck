@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import re
 from collections.abc import AsyncGenerator
@@ -9,6 +10,7 @@ from domain.models import BehaveConfig, PytestConfig, RunnerType
 from domain.services import is_safe_subpath
 from infrastructure.env_status import apply_target_venv, ensure_target_env_ready
 
+logger = logging.getLogger(__name__)
 PYTESTDECK_EVENT_PATTERN = re.compile(r"__PYTESTDECK_EVENT__:(\{[^\r\n]+\})\r?\n?")
 DEFAULT_STREAM_LIMIT = 1024 * 1024  # 1 MB
 
@@ -267,8 +269,12 @@ class SubprocessRunnerService:
                 record["file_mtime"] = file_mtime
                 record["file_hash"] = file_hash_cache[rel_file]
             db.save_runs(method_outputs, branch=run_branch)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Failed to persist test run history for %s: %s",
+                self.target_path,
+                exc,
+            )
 
         yield json.dumps(
             {
