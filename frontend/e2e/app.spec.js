@@ -1589,7 +1589,58 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     const xtermRows = page.locator('.terminal-container .xterm-rows')
     await expect(xtermRows).not.toContainText('[CRITICAL] Test execution stopped by user.')
   })
+
+  test('should provide an enlarged toggle icon and expand/collapse parent rows on row click while checkbox handles selection', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+    const toggleIcon = slowFileRow.locator('.toggle-icon')
+    await expect(toggleIcon).toBeVisible()
+    await expect(toggleIcon).toHaveText('▶')
+
+    // 1. Verify toggle-icon has an enlarged clickable hit area (>= 22px x 22px)
+    const iconBox = await toggleIcon.boundingBox()
+    expect(iconBox.width).toBeGreaterThanOrEqual(22)
+    expect(iconBox.height).toBeGreaterThanOrEqual(22)
+
+    // 2. Clicking the parent file row label expands it without selecting its tests
+    await slowFileRow.locator('.node-name').click()
+    await expect(toggleIcon).toHaveText('▼')
+    const slowClassRow = page.locator('.node-row:has-text("TestClassWithSlowSetup")')
+    await expect(slowClassRow).toBeVisible()
+    await expect(slowFileRow).not.toHaveClass(/is-selected/)
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (0)')
+
+    // 3. Clicking the parent class row label collapses and re-expands the class without selecting it
+    await expect(slowClassRow.locator('.toggle-icon')).toHaveText('▼')
+    await slowClassRow.locator('.node-name').click()
+    await expect(slowClassRow.locator('.toggle-icon')).toHaveText('▶')
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toHaveCount(0)
+    await expect(slowClassRow).not.toHaveClass(/is-selected/)
+
+    await slowClassRow.locator('.node-name').click()
+    await expect(slowClassRow.locator('.toggle-icon')).toHaveText('▼')
+    const fastOneRow = page.locator('.node-row:has-text("test_query_fast_one")')
+    await expect(fastOneRow).toBeVisible()
+
+    // 4. Clicking a parent checkbox selects its tests without collapsing the parent node
+    await slowClassRow.locator('.node-checkbox').click()
+    await expect(slowClassRow).toHaveClass(/is-selected/)
+    await expect(slowClassRow.locator('.toggle-icon')).toHaveText('▼')
+    await expect(fastOneRow).toBeVisible()
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (2)')
+
+    // Uncheck parent class checkbox
+    await slowClassRow.locator('.node-checkbox').click()
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (0)')
+
+    // 5. Clicking a leaf function row label toggles selection of that function
+    await fastOneRow.locator('.node-name').click()
+    await expect(fastOneRow).toHaveClass(/is-selected/)
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (1)')
+  })
 })
+
 
 
 
