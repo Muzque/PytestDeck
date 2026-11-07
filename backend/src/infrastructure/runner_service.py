@@ -255,7 +255,19 @@ class SubprocessRunnerService:
                 else:
                     self.proc.terminate()
 
-                await asyncio.sleep(0.5)
+                wait_fn = getattr(self.proc, "wait", None)
+                if callable(wait_fn):
+                    try:
+                        res = wait_fn()
+                        if asyncio.iscoroutine(res):
+                            await asyncio.wait_for(res, timeout=0.5)
+                        else:
+                            await asyncio.sleep(0.5)
+                    except TimeoutError:
+                        pass
+                else:
+                    await asyncio.sleep(0.5)
+
                 if self.proc.returncode is None:
                     if pgid and hasattr(os, "killpg"):
                         import signal
@@ -263,5 +275,12 @@ class SubprocessRunnerService:
                         os.killpg(pgid, signal.SIGKILL)
                     else:
                         self.proc.kill()
+                    if callable(wait_fn):
+                        try:
+                            res2 = wait_fn()
+                            if asyncio.iscoroutine(res2):
+                                await asyncio.wait_for(res2, timeout=0.5)
+                        except TimeoutError:
+                            pass
             except (ProcessLookupError, OSError):
                 pass
