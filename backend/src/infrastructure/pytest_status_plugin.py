@@ -25,7 +25,7 @@ class _PytestDeckStatusReporter:
         )
         stream = getattr(sys, "__stdout__", None) or sys.stdout
         try:
-            stream.write(f"\n{EVENT_PREFIX}{payload}\n")
+            stream.write(f"{EVENT_PREFIX}{payload}\n")
             stream.flush()
         except Exception:
             pass

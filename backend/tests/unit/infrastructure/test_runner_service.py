@@ -281,9 +281,11 @@ def test_pytest_status_plugin_reporter_lifecycle(monkeypatch):
         SimpleNamespace(nodeid="tests/test_a.py::test_teardown_err", when="teardown", duration=0.01, failed=True, skipped=False)
     )
 
+    raw_lines = buf.getvalue().splitlines()
+    assert all(line.startswith(plugin.EVENT_PREFIX) for line in raw_lines)
     lines = [
         json.loads(line.split(plugin.EVENT_PREFIX, 1)[1])
-        for line in buf.getvalue().splitlines()
+        for line in raw_lines
         if line.startswith(plugin.EVENT_PREFIX)
     ]
     by_node = {}
