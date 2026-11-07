@@ -1,4 +1,5 @@
 import { ref, computed, watch, onMounted } from 'vue'
+import { isSameTestNodeId, findNodeKey, findNodeRecord } from './nodeLookup'
 
 export function useTestRunner() {
   const targetPath = ref('')
@@ -303,13 +304,7 @@ export function useTestRunner() {
 
   const getMethodOutput = (nodeId) => {
     if (!nodeId) return null
-    if (methodOutputs.value[nodeId]) return methodOutputs.value[nodeId]
-    for (const [key, val] of Object.entries(methodOutputs.value)) {
-      if (nodeId.endsWith(key) || key.endsWith(nodeId)) {
-        return val
-      }
-    }
-    return null
+    return findNodeRecord(methodOutputs.value, nodeId)
   }
 
   const currentMethodOutput = computed(() => {
@@ -513,24 +508,6 @@ export function useTestRunner() {
     return result
   }
 
-  const isSameTestNodeId = (idA, idB) => {
-    if (!idA || !idB) return false
-    const normA = idA.replace(/\\/g, '/')
-    const normB = idB.replace(/\\/g, '/')
-    if (normA === normB) return true
-    const sepA = normA.indexOf('::')
-    const sepB = normB.indexOf('::')
-    if (sepA === -1 || sepB === -1) {
-      return normA.endsWith('/' + normB) || normB.endsWith('/' + normA)
-    }
-    const tailA = normA.slice(sepA)
-    const tailB = normB.slice(sepB)
-    if (tailA !== tailB) return false
-    const fileA = normA.slice(0, sepA)
-    const fileB = normB.slice(0, sepB)
-    return fileA === fileB || fileA.endsWith('/' + fileB) || fileB.endsWith('/' + fileA)
-  }
-
   const extractPytestNodeId = (stripped) => {
     const m = stripped.match(/^([a-zA-Z0-9_\-./\\]+\.py::[a-zA-Z0-9_\-.:]+)(.*)$/)
     if (!m) return null
@@ -561,36 +538,32 @@ export function useTestRunner() {
 
   const applyLiveOutcome = (nodeId, outcome, duration = null) => {
     if (!nodeId || !outcome) return
-    const updated = { ...methodOutputs.value }
-    let bestKey = null
-    if (updated[nodeId]) {
-      bestKey = nodeId
+    const current = methodOutputs.value
+    const bestKey = findNodeKey(current, nodeId)
+    if (bestKey) {
+      const existing = current[bestKey]
+      const nextDuration = duration !== null ? duration : existing?.duration ?? null
+      if (existing && existing.outcome === outcome && existing.duration === nextDuration) {
+        return
+      }
+      methodOutputs.value = {
+        ...current,
+        [bestKey]: {
+          ...existing,
+          outcome,
+          duration: nextDuration
+        }
+      }
     } else {
-      let bestDiff = Infinity
-      for (const key of Object.keys(updated)) {
-        if (isSameTestNodeId(key, nodeId)) {
-          const diff = Math.abs(key.length - nodeId.length)
-          if (diff < bestDiff) {
-            bestDiff = diff
-            bestKey = key
-          }
+      methodOutputs.value = {
+        ...current,
+        [nodeId]: {
+          node_id: nodeId,
+          outcome,
+          duration
         }
       }
     }
-    if (bestKey) {
-      updated[bestKey] = {
-        ...updated[bestKey],
-        outcome,
-        duration: duration !== null ? duration : updated[bestKey]?.duration ?? null
-      }
-    } else {
-      updated[nodeId] = {
-        node_id: nodeId,
-        outcome,
-        duration
-      }
-    }
-    methodOutputs.value = updated
   }
 
   const mapPytestToken = (token) => {
@@ -901,15 +874,7 @@ export function useTestRunner() {
         collectFailedLeafIds(child, outputs, result)
       }
     } else if (node.id) {
-      let rec = outputs[node.id]
-      if (!rec) {
-        for (const key of Object.keys(outputs)) {
-          if (outputs[key] && isSameTestNodeId(node.id, key)) {
-            rec = outputs[key]
-            break
-          }
-        }
-      }
+      const rec = findNodeRecord(outputs, node.id)
       const outcome = rec?.outcome ? String(rec.outcome).toLowerCase() : null
       if (outcome === 'failed' || outcome === 'error') {
         result.push(node.id)

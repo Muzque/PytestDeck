@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import TreeNode from './TreeNode.vue'
 import RunOptionsModal from './RunOptionsModal.vue'
+import { findNodeRecord } from '../composables/nodeLookup'
 
 const props = defineProps({
   activeSuite: { type: String, required: true },
@@ -45,41 +46,6 @@ const STATUS_FILTERS = [
 const activeOptionCount = computed(() =>
   (props.markerFilter ? 1 : 0) + (props.extraArgs ? 1 : 0)
 )
-
-const isSameTestNodeId = (idA, idB) => {
-  if (!idA || !idB) return false
-  const normA = idA.replace(/\\/g, '/')
-  const normB = idB.replace(/\\/g, '/')
-  if (normA === normB) return true
-  const sepA = normA.indexOf('::')
-  const sepB = normB.indexOf('::')
-  if (sepA === -1 || sepB === -1) {
-    return normA.endsWith('/' + normB) || normB.endsWith('/' + normA)
-  }
-  const tailA = normA.slice(sepA)
-  const tailB = normB.slice(sepB)
-  if (tailA !== tailB) return false
-  const fileA = normA.slice(0, sepA)
-  const fileB = normB.slice(0, sepB)
-  return fileA === fileB || fileA.endsWith('/' + fileB) || fileB.endsWith('/' + fileA)
-}
-
-const findNodeRecord = (outputs, id) => {
-  if (!id || !outputs) return null
-  if (outputs[id]) return outputs[id]
-  let bestKey = null
-  let bestDiff = Infinity
-  for (const key of Object.keys(outputs)) {
-    if (outputs[key] && isSameTestNodeId(id, key)) {
-      const diff = Math.abs(id.length - key.length)
-      if (diff < bestDiff) {
-        bestDiff = diff
-        bestKey = key
-      }
-    }
-  }
-  return bestKey ? outputs[bestKey] : null
-}
 
 const normalizeOutcome = (raw) => {
   if (!raw) return 'not-run'
