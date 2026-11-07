@@ -150,13 +150,32 @@ const rollupCounts = computed(() => {
   return counts
 })
 
+const hasChildren = computed(() => Boolean(props.node.children && props.node.children.length > 0))
+
 const toggleOpen = () => {
-  if (props.node.type === 'directory' || props.node.type === 'file' || props.node.type === 'class') {
+  if (
+    hasChildren.value ||
+    props.node.type === 'directory' ||
+    props.node.type === 'dir' ||
+    props.node.type === 'file' ||
+    props.node.type === 'fil' ||
+    props.node.type === 'class' ||
+    props.node.type === 'cls'
+  ) {
     isOpen.value = !isOpen.value
   }
 }
 
+const onCheckboxChange = () => {
+  if (props.isRunning) return
+  emit('toggle-select', props.node)
+}
+
 const onRowClick = () => {
+  if (hasChildren.value) {
+    toggleOpen()
+    return
+  }
   if (props.isRunning) return
   emit('toggle-select', props.node)
 }
@@ -202,7 +221,7 @@ const onChildToggleSelect = (targetNode) => {
         :checked="isChecked" 
         :disabled="isRunning"
         @click.stop
-        @change="onRowClick"
+        @change="onCheckboxChange"
         class="node-checkbox"
       />
 
@@ -358,13 +377,27 @@ const onChildToggleSelect = (targetNode) => {
 }
 
 .toggle-icon {
-  font-size: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 0.85rem;
   color: var(--text-muted);
   cursor: pointer;
-  width: 14px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.toggle-icon:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
 }
 .icon-spacer {
-  width: 14px;
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 .node-checkbox {
   accent-color: var(--accent-blue);
