@@ -189,4 +189,45 @@ async def test_subprocess_runner_service_emits_ping_heartbeat_during_silent_test
     assert any(c.get("type") == "finished" for c in chunks)
 
 
+@pytest.mark.anyio
+async def test_subprocess_runner_service_behave_populates_summary_counts(tmp_path):
+    """Verifies that Behave runs populate summary['report']['summary'] counts from method_outputs."""
+    import json
+
+    feat_dir = tmp_path / "features"
+    steps_dir = feat_dir / "steps"
+    steps_dir.mkdir(parents=True)
+    (feat_dir / "sample.feature").write_text(
+        "Feature: Sample Metrics\n"
+        "  Scenario: Passing scenario one\n"
+        "    Given a passing step\n"
+        "  Scenario: Failing scenario two\n"
+        "    Given a failing step\n",
+        encoding="utf-8",
+    )
+    (steps_dir / "sample_steps.py").write_text(
+        "from behave import given\n"
+        "@given('a passing step')\n"
+        "def step_pass(context):\n"
+        "    assert True\n"
+        "@given('a failing step')\n"
+        "def step_fail(context):\n"
+        "    assert False\n",
+        encoding="utf-8",
+    )
+
+    runner = SubprocessRunnerService(str(tmp_path))
+    chunks = []
+    async for raw_chunk in runner.run_test_stream(nodes=["features/sample.feature"]):
+        chunks.append(json.loads(raw_chunk))
+
+    finished = next(c for c in chunks if c.get("type") == "finished")
+    report_summary = finished["summary"].get("report", {}).get("summary", {})
+    assert report_summary.get("total") == 2
+    assert report_summary.get("passed") == 1
+    assert report_summary.get("failed") == 1
+    assert report_summary.get("skipped") == 0
+
+
+
 
