@@ -1564,6 +1564,31 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(rerunFailedBtn).toHaveCount(0)
     await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (1)')
   })
+
+  test('should not abort test execution when Run Selected is accidentally double-clicked', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+
+    // Perform an explicit double-click at the Run Selected button coordinates
+    const runBtn = page.locator('.btn-run-selected')
+    const box = await runBtn.boundingBox()
+    await page.mouse.dblclick(box.x + 24, box.y + box.height / 2)
+
+    // Left slot turns into disabled Running... while Stop appears separately on the right
+    const stopBtn = page.locator('#btn-stop-execution')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(runBtn).toBeDisabled()
+    await expect(runBtn).toContainText('Running...')
+
+    // Wait for the run to finish normally (not stopped)
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+    await expect(calcFileRow).toHaveClass(/row-has-passed/)
+
+    const xtermRows = page.locator('.terminal-container .xterm-rows')
+    await expect(xtermRows).not.toContainText('[CRITICAL] Test execution stopped by user.')
+  })
 })
 
 

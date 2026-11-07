@@ -163,12 +163,23 @@ const filteredTree = computed(() => {
       </button>
       <button
         v-else
-        class="btn btn-danger btn-run-selected"
+        class="btn btn-running-state btn-run-selected"
+        disabled
+        title="Tests are currently running"
+      >
+        <span class="btn-icon">⏳</span>
+        <span class="btn-label">Running...</span>
+      </button>
+
+      <button
+        v-if="isRunning"
+        id="btn-stop-execution"
+        class="btn btn-danger btn-stop-execution"
         @click="emit('stop')"
         title="Stop Execution"
       >
         <span class="btn-icon">⏹</span>
-        <span class="btn-label">Stop Execution</span>
+        <span class="btn-label">Stop</span>
       </button>
 
       <button
