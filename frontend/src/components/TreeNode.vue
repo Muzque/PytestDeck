@@ -6,7 +6,8 @@ const props = defineProps({
   node: { type: Object, required: true },
   selectedNodes: { type: Set, required: true },
   methodOutputs: { type: Object, default: () => ({}) },
-  isRunning: { type: Boolean, default: false }
+  isRunning: { type: Boolean, default: false },
+  forceExpand: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['toggle-select'])
@@ -14,6 +15,7 @@ const emit = defineEmits(['toggle-select'])
 const { showTooltip, hideTooltip } = useTooltip()
 
 const isOpen = ref(props.node.type !== 'file' && props.node.type !== 'fil')
+const effectiveIsOpen = computed(() => props.forceExpand || isOpen.value)
 
 watch(
   () => props.node.id,
@@ -23,7 +25,17 @@ watch(
 )
 
 const isChecked = computed(() => {
-  return props.selectedNodes.has(props.node.id)
+  if (props.selectedNodes.has(props.node.id)) return true
+  if (props.node.children && props.node.children.length > 0) {
+    const checkAllLeaves = (n) => {
+      if (n.children && n.children.length > 0) {
+        return n.children.every(checkAllLeaves)
+      }
+      return Boolean(n.id && props.selectedNodes.has(n.id))
+    }
+    return checkAllLeaves(props.node)
+  }
+  return false
 })
 
 const isFunctionNode = computed(() => {
@@ -181,7 +193,7 @@ const onChildToggleSelect = (targetNode) => {
         @click="onToggleClick"
         v-if="node.children && node.children.length > 0"
       >
-        {{ isOpen ? '▼' : '▶' }}
+        {{ effectiveIsOpen ? '▼' : '▶' }}
       </span>
       <span v-else class="icon-spacer"></span>
 
@@ -254,7 +266,7 @@ const onChildToggleSelect = (targetNode) => {
       </div>
     </div>
 
-    <div v-if="isOpen && node.children && node.children.length > 0" class="node-children">
+    <div v-if="effectiveIsOpen && node.children && node.children.length > 0" class="node-children">
       <TreeNode 
         v-for="child in node.children" 
         :key="child.id" 
@@ -262,6 +274,7 @@ const onChildToggleSelect = (targetNode) => {
         :selectedNodes="selectedNodes"
         :methodOutputs="methodOutputs"
         :isRunning="isRunning"
+        :forceExpand="forceExpand"
         @toggle-select="onChildToggleSelect"
       />
     </div>

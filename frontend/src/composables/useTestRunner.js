@@ -819,16 +819,50 @@ export function useTestRunner() {
     return idSet
   }
 
+  const syncParentSelectionStates = (treeNode, selectedSet) => {
+    if (!treeNode) return false
+    if (!treeNode.children || treeNode.children.length === 0) {
+      return Boolean(treeNode.id && selectedSet.has(treeNode.id))
+    }
+    let allChildrenSelected = true
+    for (const child of treeNode.children) {
+      const childSelected = syncParentSelectionStates(child, selectedSet)
+      if (!childSelected) {
+        allChildrenSelected = false
+      }
+    }
+    if (treeNode.id) {
+      if (allChildrenSelected && treeNode.children.length > 0) {
+        selectedSet.add(treeNode.id)
+      } else {
+        selectedSet.delete(treeNode.id)
+      }
+    }
+    return allChildrenSelected
+  }
+
+  const isVisibleSubtreeSelected = (node, selectedSet) => {
+    if (!node) return false
+    if (selectedSet.has(node.id)) return true
+    if (node.children && node.children.length > 0) {
+      return node.children.every(child => isVisibleSubtreeSelected(child, selectedSet))
+    }
+    return false
+  }
+
   const toggleSelectNode = (node) => {
     if (isRunning.value) return
     const newSet = new Set(selectedNodes.value)
-    const isCurrentlySelected = newSet.has(node.id)
+    const isCurrentlySelected = isVisibleSubtreeSelected(node, newSet)
     const allIds = collectAllChildIds(node)
 
     if (isCurrentlySelected) {
       allIds.forEach(id => newSet.delete(id))
     } else {
       allIds.forEach(id => newSet.add(id))
+    }
+    if (testTree.value) {
+      syncParentSelectionStates(testTree.value, newSet)
     }
     selectedNodes.value = newSet
   }
@@ -859,6 +893,45 @@ export function useTestRunner() {
     }
     return countSelectedFunctionsInTree(testTree.value, selectedNodes.value)
   })
+
+  const collectFailedLeafIds = (node, outputs, result = []) => {
+    if (!node) return result
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        collectFailedLeafIds(child, outputs, result)
+      }
+    } else if (node.id) {
+      let rec = outputs[node.id]
+      if (!rec) {
+        for (const key of Object.keys(outputs)) {
+          if (outputs[key] && isSameTestNodeId(node.id, key)) {
+            rec = outputs[key]
+            break
+          }
+        }
+      }
+      const outcome = rec?.outcome ? String(rec.outcome).toLowerCase() : null
+      if (outcome === 'failed' || outcome === 'error') {
+        result.push(node.id)
+      }
+    }
+    return result
+  }
+
+  const failedNodeIds = computed(() => {
+    if (!testTree.value || !methodOutputs.value) return []
+    return collectFailedLeafIds(testTree.value, methodOutputs.value)
+  })
+
+  const failedCount = computed(() => failedNodeIds.value.length)
+
+  const runFailedTests = () => {
+    if (isRunning.value) return
+    const ids = failedNodeIds.value
+    if (ids.length === 0) return
+    selectedNodes.value = new Set(ids)
+    runTests()
+  }
 
 
   const getExecutionNodes = () => {
@@ -1259,6 +1332,8 @@ export function useTestRunner() {
     testTree,
     selectedNodes,
     selectedCount,
+    failedCount,
+    runFailedTests,
     activeTab,
 
     logs,

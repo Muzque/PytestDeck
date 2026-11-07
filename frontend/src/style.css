@@ -478,6 +478,108 @@ select {
   white-space: nowrap;
 }
 
+.btn-rerun-failed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 6px;
+  white-space: nowrap;
+  background: rgba(248, 113, 113, 0.16);
+  color: var(--accent-red);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-rerun-failed:hover {
+  background: rgba(248, 113, 113, 0.26);
+  border-color: rgba(248, 113, 113, 0.65);
+  transform: translateY(-1px);
+}
+
+.explorer-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.explorer-search-input {
+  width: 100%;
+  padding: 5px 26px 5px 10px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-main);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.explorer-search-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.btn-clear-search {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.btn-clear-search:hover {
+  color: var(--text-main);
+}
+
+.status-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.status-filter-btn {
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.status-filter-btn:hover {
+  color: var(--text-main);
+  border-color: var(--border-hover);
+}
+
+.status-filter-btn.active {
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--accent-blue);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
 .toolbar-actions {
   display: flex;
   align-items: center;

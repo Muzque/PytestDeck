@@ -1466,6 +1466,104 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     const connectCount = await page.evaluate(() => window.__wsConnectCount)
     expect(connectCount).toBe(1)
   })
+
+  test('should filter DirectoryTree by search query and status filter and support one-click Re-run Failed', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const searchInput = page.locator('#explorer-search-input')
+    await expect(searchInput).toBeVisible()
+
+    // 1. Type search query 'long_running_pipeline' -> parent file auto-expands and only matching test is shown
+    await searchInput.fill('long_running_pipeline')
+    await expect(page.locator('.node-row:has-text("test_long_running_pipeline")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toHaveCount(0)
+
+    // Searching for a non-existent test shows empty filter message
+    await searchInput.fill('__no_such_test_node__')
+    await expect(page.locator('.tree-empty-filter')).toContainText('No matching tests found.')
+
+    // Searching for 'divide' in test_calculator.py and checking parent file checkbox selects ONLY the 2 visible filtered functions
+    await searchInput.fill('divide')
+    const calcFileRowFiltered = page.locator('.node-row:has-text("test_calculator.py")')
+    await expect(calcFileRowFiltered).toBeVisible()
+    await calcFileRowFiltered.locator('.node-checkbox').click()
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (2)')
+    await page.click('#btn-clear-selection')
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (0)')
+
+    // Clear search button restores full tree
+    await page.click('#btn-clear-search')
+    await expect(searchInput).toHaveValue('')
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toBeVisible()
+
+    // 2. Seed 1 failed test, 1 passed test, and 1 skipped test via /api/test-runs and focus window
+    await page.route('**/api/test-runs*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          runs: {
+            'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_one': {
+              node_id: 'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_one',
+              outcome: 'failed',
+              duration: 0.02
+            },
+            'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_two': {
+              node_id: 'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_two',
+              outcome: 'passed',
+              duration: 0.01
+            },
+            'tests/unit/test_slow_and_classes.py::test_intentionally_skipped_case': {
+              node_id: 'tests/unit/test_slow_and_classes.py::test_intentionally_skipped_case',
+              outcome: 'skipped',
+              duration: 0.001
+            }
+          }
+        })
+      })
+    })
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+
+    // Re-run Failed (1) button should appear
+    const rerunFailedBtn = page.locator('#btn-rerun-failed')
+    await expect(rerunFailedBtn).toBeVisible()
+    await expect(rerunFailedBtn).toContainText('Re-run Failed (1)')
+
+    // 3. Verify Failed, Passed, Skipped, and Not Run status filter pills
+    await page.click('[data-status-filter="failed"]')
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_two")')).toHaveCount(0)
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toHaveCount(0)
+
+    await page.click('[data-status-filter="passed"]')
+    await expect(page.locator('.node-row:has-text("test_query_fast_two")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toHaveCount(0)
+
+    await page.click('[data-status-filter="skipped"]')
+    await expect(page.locator('.node-row:has-text("test_intentionally_skipped_case")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toHaveCount(0)
+
+    await page.click('[data-status-filter="not-run"]')
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toHaveCount(0)
+    await expect(page.locator('.node-row:has-text("test_query_fast_two")')).toHaveCount(0)
+
+    // Switch back to All status filter
+    await page.click('[data-status-filter="all"]')
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toBeVisible()
+
+    // 4. Click Re-run Failed (1) -> selects only test_query_fast_one and runs it (where it passes!)
+    await page.unroute('**/api/test-runs*')
+    await rerunFailedBtn.click()
+
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Now that test_query_fast_one passed, Re-run Failed button disappears and Run Selected shows (1)
+    await expect(rerunFailedBtn).toHaveCount(0)
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (1)')
+  })
 })
 
 
