@@ -86,8 +86,9 @@ const formatRunDuration = (item) => {
           </span>
         </div>
         <div v-if="item.summary?.report?.summary" class="history-details">
-          <span>Passed: {{ item.summary.report.summary.passed || 0 }}</span> |
-          <span>Failed: {{ item.summary.report.summary.failed || 0 }}</span>
+          <span>Passed: {{ (item.summary.report.summary.passed || 0) + (item.summary.report.summary.xpassed || 0) }}</span> |
+          <span>Failed: {{ (item.summary.report.summary.failed || 0) + (item.summary.report.summary.error || 0) }}</span> |
+          <span>Skipped: {{ (item.summary.report.summary.skipped || 0) + (item.summary.report.summary.xfailed || 0) }}</span>
         </div>
       </div>
     </div>

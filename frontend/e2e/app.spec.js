@@ -902,15 +902,43 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
     await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
 
+    // Verify Metrics & Summary tab shows Total Tests, Passed, Failed, and Skipped cards for Behave run
+    await page.click('button:has-text("Metrics & Summary")')
+    await expect(page.locator('.card-exit .value')).toHaveText('0')
+    await expect(page.locator('.card-total .value')).toHaveText('4')
+    await expect(page.locator('.card-pass .value')).toHaveText('4')
+    await expect(page.locator('.card-fail .value')).toHaveText('0')
+    await expect(page.locator('.card-skip .value')).toHaveText('0')
+
     // Switch back to Execution History and verify:
     // - Both history rows are present
-    // - Newest row (index 0, behave) displays its formatted duration parsed from Took Xmin Y.ZZZs
+    // - Newest row (index 0, behave) displays its formatted duration parsed from Took Xmin Y.ZZZs and Passed/Failed/Skipped summary
     // - Earlier row (index 1, pytest) still preserves its original expectedPytestDuration
     await page.click('button:has-text("Execution History")')
     await expect(historyItems).toHaveCount(2)
     await expect(historyItems.nth(0).locator('.history-duration')).toBeVisible()
     await expect(historyItems.nth(0).locator('.history-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
+    await expect(historyItems.nth(0).locator('.history-details')).toContainText('Passed: 4')
+    await expect(historyItems.nth(0).locator('.history-details')).toContainText('Failed: 0')
+    await expect(historyItems.nth(0).locator('.history-details')).toContainText('Skipped: 0')
     await expect(historyItems.nth(1).locator('.history-duration')).toHaveText(expectedPytestDuration)
+    await expect(historyItems.nth(1).locator('.history-details')).toContainText('Passed: 11')
+    await expect(historyItems.nth(1).locator('.history-details')).toContainText('Skipped: 0')
+
+    // 3. Switch to Unit Tests and run test_slow_and_classes.py (6 passed, 2 skipped) to verify Skipped card
+    await suiteSelect.selectOption({ index: 0 })
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+    await expect(slowFileRow).toBeVisible({ timeout: 15000 })
+    await slowFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    await page.click('button:has-text("Metrics & Summary")')
+    await expect(page.locator('.card-total .value')).toHaveText('8')
+    await expect(page.locator('.card-pass .value')).toHaveText('6')
+    await expect(page.locator('.card-fail .value')).toHaveText('0')
+    await expect(page.locator('.card-skip .value')).toHaveText('2')
   })
 
   test('should show duration chip on every colored DirectoryTree function and scenario node including parametrized special chars', async ({ page }) => {
