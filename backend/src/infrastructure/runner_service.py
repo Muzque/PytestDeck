@@ -197,6 +197,28 @@ class SubprocessRunnerService:
 
         method_outputs = output_collector.get_results()
 
+        if "report" not in summary and "report_error" not in summary and method_outputs:
+            passed_count = sum(
+                1 for r in method_outputs.values() if r.get("outcome") == "passed"
+            )
+            failed_count = sum(
+                1
+                for r in method_outputs.values()
+                if r.get("outcome") in ("failed", "error")
+            )
+            skipped_count = sum(
+                1 for r in method_outputs.values() if r.get("outcome") == "skipped"
+            )
+            total_count = passed_count + failed_count + skipped_count
+            summary["report"] = {
+                "summary": {
+                    "total": total_count,
+                    "passed": passed_count,
+                    "failed": failed_count,
+                    "skipped": skipped_count,
+                }
+            }
+
         # Persist method outputs to SQLite database with branch, code_hash, file_hash, and file_mtime
         try:
             from infrastructure.history_db import HistoryDatabase

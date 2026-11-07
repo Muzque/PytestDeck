@@ -189,4 +189,141 @@ async def test_subprocess_runner_service_emits_ping_heartbeat_during_silent_test
     assert any(c.get("type") == "finished" for c in chunks)
 
 
+@pytest.mark.anyio
+async def test_subprocess_runner_service_behave_populates_summary_counts(tmp_path):
+    """Verifies that Behave runs populate summary['report']['summary'] counts from method_outputs."""
+    import json
+
+    feat_dir = tmp_path / "features"
+    steps_dir = feat_dir / "steps"
+    steps_dir.mkdir(parents=True)
+    (feat_dir / "sample.feature").write_text(
+        "Feature: Sample Metrics\n"
+        "  Scenario: Passing scenario one\n"
+        "    Given a passing step\n"
+        "  Scenario: Failing scenario two\n"
+        "    Given a failing step\n",
+        encoding="utf-8",
+    )
+    (steps_dir / "sample_steps.py").write_text(
+        "from behave import given\n"
+        "@given('a passing step')\n"
+        "def step_pass(context):\n"
+        "    assert True\n"
+        "@given('a failing step')\n"
+        "def step_fail(context):\n"
+        "    assert False\n",
+        encoding="utf-8",
+    )
+
+    runner = SubprocessRunnerService(str(tmp_path))
+    chunks = []
+    async for raw_chunk in runner.run_test_stream(nodes=["features/sample.feature"]):
+        chunks.append(json.loads(raw_chunk))
+
+    finished = next(c for c in chunks if c.get("type") == "finished")
+    report_summary = finished["summary"].get("report", {}).get("summary", {})
+    assert report_summary.get("total") == 2
+    assert report_summary.get("passed") == 1
+    assert report_summary.get("failed") == 1
+    assert report_summary.get("skipped") == 0
+
+
+def test_pytest_status_plugin_reporter_lifecycle(monkeypatch):
+    """Verifies _PytestDeckStatusReporter and pytest_configure across setup, call, teardown, and xdist worker checks."""
+    import io
+    import json
+    from types import SimpleNamespace
+
+    import infrastructure.pytest_status_plugin as plugin
+
+    buf = io.StringIO()
+    monkeypatch.setattr(plugin.sys, "__stdout__", buf)
+
+    reporter = plugin._PytestDeckStatusReporter()
+    # Empty node_id is ignored
+    reporter._emit("", "running")
+    reporter.pytest_runtest_logreport(SimpleNamespace(nodeid=""))
+
+    # 1. Normal pass lifecycle (logstart -> setup -> call -> teardown)
+    reporter.pytest_runtest_logstart("tests/test_a.py::test_ok", ("tests/test_a.py", 1, "test_ok"))
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_ok", when="setup", duration=0.01, failed=False, skipped=False)
+    )
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_ok", when="call", duration=0.02, failed=False, skipped=False)
+    )
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_ok", when="teardown", duration=0.01, failed=False, skipped=False)
+    )
+
+    # 2. Setup skip and setup failure
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_setup_skip", when="setup", duration=0.001, failed=False, skipped=True)
+    )
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_setup_fail", when="setup", duration=0.002, failed=True, skipped=False)
+    )
+
+    # 3. Call xfail, call skip, call fail, and teardown failure overriding pass
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(
+            nodeid="tests/test_a.py::test_xfail", when="call", duration=0.01, failed=True, skipped=False, wasxfail="reason"
+        )
+    )
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_call_skip", when="call", duration=0.01, failed=False, skipped=True)
+    )
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_teardown_err", when="call", duration=0.01, failed=False, skipped=False)
+    )
+    reporter.pytest_runtest_logreport(
+        SimpleNamespace(nodeid="tests/test_a.py::test_teardown_err", when="teardown", duration=0.01, failed=True, skipped=False)
+    )
+
+    lines = [
+        json.loads(line.split(plugin.EVENT_PREFIX, 1)[1])
+        for line in buf.getvalue().splitlines()
+        if line.startswith(plugin.EVENT_PREFIX)
+    ]
+    by_node = {}
+    for item in lines:
+        by_node.setdefault(item["node_id"], []).append(item)
+
+    assert by_node["tests/test_a.py::test_ok"][0]["outcome"] == "running"
+    assert by_node["tests/test_a.py::test_ok"][-1] == {
+        "node_id": "tests/test_a.py::test_ok",
+        "outcome": "passed",
+        "duration": 0.04,
+    }
+    assert by_node["tests/test_a.py::test_setup_skip"][-1]["outcome"] == "skipped"
+    assert by_node["tests/test_a.py::test_setup_fail"][-1]["outcome"] == "failed"
+    assert by_node["tests/test_a.py::test_xfail"][-1]["outcome"] == "skipped"
+    assert by_node["tests/test_a.py::test_call_skip"][-1]["outcome"] == "skipped"
+    assert by_node["tests/test_a.py::test_teardown_err"][-1]["outcome"] == "failed"
+
+    # Verify pytest_configure skips registration on xdist workers and registers on controller
+    registered = []
+    worker_cfg = SimpleNamespace(
+        workerinput={},
+        pluginmanager=SimpleNamespace(
+            has_plugin=lambda _: False,
+            register=lambda p, name: registered.append(name),
+        ),
+    )
+    plugin.pytest_configure(worker_cfg)
+    assert registered == []
+
+    controller_cfg = SimpleNamespace(
+        pluginmanager=SimpleNamespace(
+            has_plugin=lambda _: False,
+            register=lambda p, name: registered.append(name),
+        ),
+    )
+    plugin.pytest_configure(controller_cfg)
+    assert registered == ["pytestdeck_status_reporter"]
+
+
+
+
 

@@ -22,6 +22,8 @@ const {
   testTree,
   selectedNodes,
   selectedCount,
+  failedCount,
+  runFailedTests,
   activeTab,
 
   logs,
@@ -74,6 +76,7 @@ const { activeTooltip } = useTooltip()
         :isDiscovering="isDiscovering"
         :isRunning="isRunning"
         :selectedCount="selectedCount"
+        :failedCount="failedCount"
         v-model:markerFilter="markerFilter"
 
         v-model:extraArgs="extraArgs"
@@ -84,6 +87,7 @@ const { activeTooltip } = useTooltip()
         @clear-selection="clearSelections"
         @discover="discoverTests"
         @run="runTests"
+        @run-failed="runFailedTests"
         @stop="stopTests"
         @clear-all-history="clearAllMethodOutputs"
         @prune-branches="pruneMergedAndDeletedBranches"
@@ -147,7 +151,7 @@ const { activeTooltip } = useTooltip()
             <TerminalView :logs="logs" :isRunning="isRunning" />
           </div>
 
-          <!-- Detail Info Tab (for Integration & Behave suites) -->
+          <!-- Detail Info Tab -->
           <div v-show="activeTab === 'detail'" class="tab-pane detail-pane">
             <TestDetailView 
               :detail="selectedTestDetail" 

@@ -232,6 +232,48 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('.docstring-card')).toBeVisible()
   })
 
+  test('should display Detail Info tab when a single test function is selected in Unit Tests suite', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Default active suite is Unit Tests (index 0)
+    await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
+
+    // Expand test_calculator.py and select a single test function
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await expect(calcFileRow).toBeVisible({ timeout: 15000 })
+    await calcFileRow.locator('.toggle-icon').click()
+
+    const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
+    await expect(funcRow).toBeVisible({ timeout: 15000 })
+    await funcRow.click()
+
+    // Detail Info tab should appear and become active
+    const detailTabBtn = page.locator('.tab-btn-detail')
+    await expect(detailTabBtn).toBeVisible()
+    await expect(detailTabBtn).toHaveClass(/active/)
+    await expect(page.locator('.detail-pane')).toBeVisible()
+    await expect(page.locator('.detail-title')).toBeVisible()
+    await expect(page.locator('.docstring-card')).toBeVisible()
+
+    // Run single unit test method via ▶ Run Test (-s) button and verify status badge updates
+    const runMethodBtn = page.locator('.btn-run-method')
+    await expect(runMethodBtn).toBeVisible()
+    await runMethodBtn.click()
+    await expect(page.locator('.run-status-badge')).toBeVisible({ timeout: 20000 })
+    await expect(runMethodBtn).toBeEnabled({ timeout: 10000 })
+
+    // Clean up auto-appended -s flag
+    const clearAllBtn = page.locator('.btn-clear-all')
+    if (await clearAllBtn.isVisible()) {
+      await clearAllBtn.click()
+    }
+
+    // Selecting a whole file (multiple functions) hides Detail Info tab and returns to Terminal Output
+    await calcFileRow.locator('.node-checkbox').click()
+    await expect(detailTabBtn).not.toBeVisible()
+    await expect(page.locator('.terminal-container')).toBeVisible()
+  })
+
   test('should display Detail Info tab when a single scenario is selected in Behave acceptance suite', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
 
@@ -860,15 +902,43 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
     await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
 
+    // Verify Metrics & Summary tab shows Total Tests, Passed, Failed, and Skipped cards for Behave run
+    await page.click('button:has-text("Metrics & Summary")')
+    await expect(page.locator('.card-exit .value')).toHaveText('0')
+    await expect(page.locator('.card-total .value')).toHaveText('4')
+    await expect(page.locator('.card-pass .value')).toHaveText('4')
+    await expect(page.locator('.card-fail .value')).toHaveText('0')
+    await expect(page.locator('.card-skip .value')).toHaveText('0')
+
     // Switch back to Execution History and verify:
     // - Both history rows are present
-    // - Newest row (index 0, behave) displays its formatted duration parsed from Took Xmin Y.ZZZs
+    // - Newest row (index 0, behave) displays its formatted duration parsed from Took Xmin Y.ZZZs and Passed/Failed/Skipped summary
     // - Earlier row (index 1, pytest) still preserves its original expectedPytestDuration
     await page.click('button:has-text("Execution History")')
     await expect(historyItems).toHaveCount(2)
     await expect(historyItems.nth(0).locator('.history-duration')).toBeVisible()
     await expect(historyItems.nth(0).locator('.history-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
+    await expect(historyItems.nth(0).locator('.history-details')).toContainText('Passed: 4')
+    await expect(historyItems.nth(0).locator('.history-details')).toContainText('Failed: 0')
+    await expect(historyItems.nth(0).locator('.history-details')).toContainText('Skipped: 0')
     await expect(historyItems.nth(1).locator('.history-duration')).toHaveText(expectedPytestDuration)
+    await expect(historyItems.nth(1).locator('.history-details')).toContainText('Passed: 11')
+    await expect(historyItems.nth(1).locator('.history-details')).toContainText('Skipped: 0')
+
+    // 3. Switch to Unit Tests and run test_slow_and_classes.py (6 passed, 2 skipped) to verify Skipped card
+    await suiteSelect.selectOption({ index: 0 })
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+    await expect(slowFileRow).toBeVisible({ timeout: 15000 })
+    await slowFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    await page.click('button:has-text("Metrics & Summary")')
+    await expect(page.locator('.card-total .value')).toHaveText('8')
+    await expect(page.locator('.card-pass .value')).toHaveText('6')
+    await expect(page.locator('.card-fail .value')).toHaveText('0')
+    await expect(page.locator('.card-skip .value')).toHaveText('2')
   })
 
   test('should show duration chip on every colored DirectoryTree function and scenario node including parametrized special chars', async ({ page }) => {
@@ -1395,6 +1465,104 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.waitForTimeout(1500)
     const connectCount = await page.evaluate(() => window.__wsConnectCount)
     expect(connectCount).toBe(1)
+  })
+
+  test('should filter DirectoryTree by search query and status filter and support one-click Re-run Failed', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const searchInput = page.locator('#explorer-search-input')
+    await expect(searchInput).toBeVisible()
+
+    // 1. Type search query 'long_running_pipeline' -> parent file auto-expands and only matching test is shown
+    await searchInput.fill('long_running_pipeline')
+    await expect(page.locator('.node-row:has-text("test_long_running_pipeline")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toHaveCount(0)
+
+    // Searching for a non-existent test shows empty filter message
+    await searchInput.fill('__no_such_test_node__')
+    await expect(page.locator('.tree-empty-filter')).toContainText('No matching tests found.')
+
+    // Searching for 'divide' in test_calculator.py and checking parent file checkbox selects ONLY the 2 visible filtered functions
+    await searchInput.fill('divide')
+    const calcFileRowFiltered = page.locator('.node-row:has-text("test_calculator.py")')
+    await expect(calcFileRowFiltered).toBeVisible()
+    await calcFileRowFiltered.locator('.node-checkbox').click()
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (2)')
+    await page.click('#btn-clear-selection')
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (0)')
+
+    // Clear search button restores full tree
+    await page.click('#btn-clear-search')
+    await expect(searchInput).toHaveValue('')
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toBeVisible()
+
+    // 2. Seed 1 failed test, 1 passed test, and 1 skipped test via /api/test-runs and focus window
+    await page.route('**/api/test-runs*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          runs: {
+            'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_one': {
+              node_id: 'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_one',
+              outcome: 'failed',
+              duration: 0.02
+            },
+            'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_two': {
+              node_id: 'tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_two',
+              outcome: 'passed',
+              duration: 0.01
+            },
+            'tests/unit/test_slow_and_classes.py::test_intentionally_skipped_case': {
+              node_id: 'tests/unit/test_slow_and_classes.py::test_intentionally_skipped_case',
+              outcome: 'skipped',
+              duration: 0.001
+            }
+          }
+        })
+      })
+    })
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+
+    // Re-run Failed (1) button should appear
+    const rerunFailedBtn = page.locator('#btn-rerun-failed')
+    await expect(rerunFailedBtn).toBeVisible()
+    await expect(rerunFailedBtn).toContainText('Re-run Failed (1)')
+
+    // 3. Verify Failed, Passed, Skipped, and Not Run status filter pills
+    await page.click('[data-status-filter="failed"]')
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_two")')).toHaveCount(0)
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toHaveCount(0)
+
+    await page.click('[data-status-filter="passed"]')
+    await expect(page.locator('.node-row:has-text("test_query_fast_two")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toHaveCount(0)
+
+    await page.click('[data-status-filter="skipped"]')
+    await expect(page.locator('.node-row:has-text("test_intentionally_skipped_case")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toHaveCount(0)
+
+    await page.click('[data-status-filter="not-run"]')
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toBeVisible()
+    await expect(page.locator('.node-row:has-text("test_query_fast_one")')).toHaveCount(0)
+    await expect(page.locator('.node-row:has-text("test_query_fast_two")')).toHaveCount(0)
+
+    // Switch back to All status filter
+    await page.click('[data-status-filter="all"]')
+    await expect(page.locator('.node-row:has-text("test_calculator.py")')).toBeVisible()
+
+    // 4. Click Re-run Failed (1) -> selects only test_query_fast_one and runs it (where it passes!)
+    await page.unroute('**/api/test-runs*')
+    await rerunFailedBtn.click()
+
+    const stopBtn = page.locator('.btn-danger')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 }).catch(() => {})
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    // Now that test_query_fast_one passed, Re-run Failed button disappears and Run Selected shows (1)
+    await expect(rerunFailedBtn).toHaveCount(0)
+    await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (1)')
   })
 })
 
