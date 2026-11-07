@@ -367,6 +367,34 @@ async def test_read_stream_line_recovers_from_limit_overrun():
     assert chunk.startswith(b"A" * 32)
 
 
+@pytest.mark.anyio
+async def test_subprocess_runner_service_logs_warning_on_history_persistence_error(tmp_path, monkeypatch, caplog):
+    """Verifies that history database persistence errors are logged as warnings rather than swallowed silently."""
+    import json
+    import logging
+
+    from infrastructure.history_db import HistoryDatabase
+
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    (test_dir / "test_log_warn.py").write_text("def test_pass(): assert True\n", encoding="utf-8")
+
+    def boom_save_runs(self, *args, **kwargs):
+        raise RuntimeError("disk I/O error")
+
+    monkeypatch.setattr(HistoryDatabase, "save_runs", boom_save_runs)
+
+    runner = SubprocessRunnerService(str(tmp_path))
+    with caplog.at_level(logging.WARNING, logger="infrastructure.runner_service"):
+        chunks = []
+        async for raw_chunk in runner.run_test_stream(nodes=["tests/test_log_warn.py"]):
+            chunks.append(json.loads(raw_chunk))
+
+    assert any(c.get("type") == "finished" for c in chunks)
+    assert any("Failed to persist test run history" in rec.message for rec in caplog.records)
+
+
+
 
 
 

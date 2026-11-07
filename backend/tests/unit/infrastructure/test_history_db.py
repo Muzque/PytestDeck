@@ -369,3 +369,32 @@ def test_history_database_prune_branches(tmp_path):
     assert non_git_db.get_run("test_x.py::test_1") is not None
 
 
+def test_history_database_wal_mode_and_schema_init_cache(tmp_path, monkeypatch):
+    """Verifies that WAL mode is enabled and _init_db is cached across repeated HistoryDatabase instantiations."""
+    db_file = tmp_path / "wal_cached.db"
+    init_calls = 0
+    orig_init_db = HistoryDatabase._init_db
+
+    def counting_init_db(self):
+        nonlocal init_calls
+        init_calls += 1
+        return orig_init_db(self)
+
+    monkeypatch.setattr(HistoryDatabase, "_init_db", counting_init_db)
+
+    db1 = HistoryDatabase(db_path=db_file)
+    assert init_calls == 1
+
+    with db1._get_connection() as conn:
+        mode = conn.execute("PRAGMA journal_mode;").fetchone()[0]
+        assert mode.lower() == "wal"
+
+    # Subsequent instantiations on the same database file skip _init_db
+    db2 = HistoryDatabase(db_path=db_file)
+    db3 = HistoryDatabase(db_path=db_file)
+    assert init_calls == 1
+    db2.save_run("test_wal.py::test_one", outcome="passed")
+    assert db3.get_run("test_wal.py::test_one") is not None
+
+
+
