@@ -196,19 +196,31 @@ def _format_decorator(dec_node: ast.AST) -> str:
         return "@decorator"
 
 
-def get_python_test_detail(file_path: Path, parts: list[str]) -> dict[str, Any]:
+def get_python_test_detail(
+    file_path: Path,
+    parts: list[str],
+    parsed_cache: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Extracts test function, method, or class metadata and docstrings using AST.
 
     Args:
         file_path: Path to the target Python test file.
         parts: List of path components split by '::' (e.g. ['test_foo'] or ['TestBar', 'test_method']).
+        parsed_cache: Optional dictionary caching parsed AST and content per file path.
 
     Returns:
         dict[str, Any]: Test detail dictionary.
     """
-    content = file_path.read_text(encoding="utf-8", errors="replace")
-    tree = ast.parse(content, filename=str(file_path))
-    file_mtime = file_path.stat().st_mtime if file_path.exists() else None
+    cache_key = f"py:{file_path}"
+    if parsed_cache is not None and cache_key in parsed_cache:
+        content, tree, file_mtime = parsed_cache[cache_key]
+    else:
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        tree = ast.parse(content, filename=str(file_path))
+        file_mtime = file_path.stat().st_mtime if file_path.exists() else None
+        if parsed_cache is not None:
+            parsed_cache[cache_key] = (content, tree, file_mtime)
+
 
     if not parts:
         # File module level docstring
@@ -343,14 +355,22 @@ def resolve_test_file(target_dir: Path, rel_file: str) -> Path | None:
 
 
 def get_node_code_metadata(
-    target_dir: Path, node_id: str
+    target_dir: Path,
+    node_id: str,
+    cache: dict[str, Any] | None = None,
 ) -> tuple[str | None, float | None]:
     """Helper to quickly obtain (code_hash, file_mtime) for a given node ID."""
     try:
         parts = node_id.split("::")
         rel_file = parts[0]
         sub_parts = parts[1:] if len(parts) > 1 else []
-        full_path = resolve_test_file(target_dir, rel_file)
+        file_cache_key = f"resolve:{rel_file}"
+        if cache is not None and file_cache_key in cache:
+            full_path = cache[file_cache_key]
+        else:
+            full_path = resolve_test_file(target_dir, rel_file)
+            if cache is not None:
+                cache[file_cache_key] = full_path
         if not full_path or not full_path.exists():
             return None, None
 
@@ -358,7 +378,9 @@ def get_node_code_metadata(
             scenario_name = sub_parts[0] if sub_parts else None
             detail = get_feature_detail(full_path, scenario_name=scenario_name)
         else:
-            detail = get_python_test_detail(full_path, sub_parts)
+            detail = get_python_test_detail(
+                full_path, sub_parts, parsed_cache=cache
+            )
         return detail.get("code_hash"), detail.get("file_mtime")
     except Exception:
         return None, None

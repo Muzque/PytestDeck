@@ -45,6 +45,9 @@ def get_env_config(target_path: str = "") -> dict[str, Any]:
 class PytestDiscoveryService:
     """Infrastructure service executing pytest collect-only process."""
 
+    def __init__(self, timeout: float = 60.0):
+        self.timeout = timeout
+
     async def collect_raw(self, target_path: str, suite_rel_path: str = "") -> tuple[list[dict[str, Any]], int]:
         """Executes a subprocess collect-only pytest pass on the target directory.
 
@@ -100,6 +103,7 @@ class PytestDiscoveryService:
         report_file = create_report_path(target_dir, prefix="discovery")
         tmp_report = str(report_file)
 
+        proc: asyncio.subprocess.Process | None = None
         try:
             cmd = [
                 "uv", "run", "--with", "pytest-json-report", "pytest", "--collect-only",
@@ -132,7 +136,14 @@ class PytestDiscoveryService:
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
             )
-            stdout_bytes, stderr_bytes = await proc.communicate()
+            try:
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    proc.communicate(), timeout=self.timeout
+                )
+            except TimeoutError as exc:
+                raise ValueError(
+                    f"Pytest test collection timed out after {self.timeout}s"
+                ) from exc
 
             collectors = []
             if os.path.exists(tmp_report):
@@ -154,4 +165,14 @@ class PytestDiscoveryService:
             )
             return collectors, total_items
         finally:
+            if proc is not None and proc.returncode is None:
+                try:
+                    proc.terminate()
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=0.5)
+                    except TimeoutError:
+                        proc.kill()
+                        await asyncio.wait_for(proc.wait(), timeout=0.5)
+                except (ProcessLookupError, OSError, TimeoutError):
+                    pass
             cleanup_report_file(tmp_report)

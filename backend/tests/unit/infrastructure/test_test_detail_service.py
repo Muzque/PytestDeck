@@ -111,3 +111,39 @@ def test_extract_test_detail_safe_and_error_handling(tmp_path: Path):
     # Missing file
     with pytest.raises(ValueError, match="Test file not found"):
         extract_test_detail(str(tmp_path), "nonexistent.py::test_foo")
+
+
+def test_get_node_code_metadata_caches_ast_parsing_per_file(tmp_path: Path, monkeypatch):
+    """Verifies that get_node_code_metadata parses each Python file only once when a shared cache is provided."""
+    import ast
+
+    from infrastructure.test_detail_service import get_node_code_metadata
+
+    test_file = tmp_path / "test_many.py"
+    test_file.write_text(
+        "def test_alpha():\n    assert 1 == 1\n\n"
+        "def test_beta():\n    assert 2 == 2\n\n"
+        "def test_gamma():\n    assert 3 == 3\n",
+        encoding="utf-8",
+    )
+
+    parse_calls = 0
+    real_parse = ast.parse
+
+    def counting_parse(*args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return real_parse(*args, **kwargs)
+
+    monkeypatch.setattr(ast, "parse", counting_parse)
+
+    cache = {}
+    h1, m1 = get_node_code_metadata(tmp_path, "test_many.py::test_alpha", cache=cache)
+    h2, m2 = get_node_code_metadata(tmp_path, "test_many.py::test_beta", cache=cache)
+    h3, m3 = get_node_code_metadata(tmp_path, "test_many.py::test_gamma", cache=cache)
+
+    assert h1 and h2 and h3
+    assert h1 != h2 != h3
+    assert m1 == m2 == m3
+    assert parse_calls == 1
+
