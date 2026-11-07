@@ -1641,7 +1641,46 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(fastOneRow).toHaveClass(/is-selected/)
     await expect(page.locator('.btn-run-selected')).toContainText('Run Selected (1)')
   })
+
+  test('should display live test progress counter and elapsed timer in Terminal Output header while running', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const liveCounter = page.locator('.terminal-toolbar .terminal-live-counter')
+    await expect(liveCounter).toHaveCount(0)
+
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+    await slowFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+
+    // While running, live counter appears in Terminal Output header with / 8 total and elapsed timer
+    await expect(liveCounter).toBeVisible({ timeout: 5000 })
+    await expect(liveCounter.locator('.counter-progress')).toContainText('/ 8')
+    await expect(liveCounter.locator('.counter-timer')).toHaveText(/⏱\s*\d+\.\ds/)
+
+    // As earlier tests complete while slow test is still running, passed chip appears in the live counter
+    await expect(liveCounter.locator('.counter-chip.passed')).toBeVisible({ timeout: 10000 })
+
+    // Once execution completes, the counter stays visible showing final 8 / 8 counts and timer
+    await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 30000 })
+    await expect(liveCounter).toBeVisible()
+    await expect(liveCounter.locator('.counter-progress')).toContainText('8 / 8')
+    await expect(liveCounter.locator('.counter-chip.passed')).toHaveText('6 ✓')
+    await expect(liveCounter.locator('.counter-chip.skipped')).toHaveText('2 –')
+
+    // Triggering a new run refreshes the counter to the new selection (11 tests) and keeps it when stopped
+    await page.click('#btn-clear-selection')
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+    await expect(liveCounter.locator('.counter-progress')).toContainText('/ 11')
+    await page.locator('#btn-stop-execution').click()
+    await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 10000 })
+    await expect(liveCounter).toBeVisible()
+    await expect(liveCounter.locator('.counter-progress')).toContainText('⏹')
+    await expect(liveCounter.locator('.counter-progress')).toContainText('/ 11')
+  })
 })
+
 
 
 
