@@ -135,4 +135,100 @@ def test_ws_run_emits_ping_keepalive_during_silent_execution(tmp_path, monkeypat
     assert any(m.get("type") == "ping" for m in messages)
 
 
+def _is_pid_alive(pid: int) -> bool:
+    import os
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def test_ws_run_stop_aborts_silent_subprocess_immediately(tmp_path):
+    """Verifies that sending STOP while a test is silently sleeping aborts the subprocess within ~1s."""
+    import time
+
+    pid_file = tmp_path / "test_pid.txt"
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_hang.py"
+    test_file.write_text(
+        "import os, pathlib, time\n"
+        "def test_silent_hang():\n"
+        f"    pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+        "    time.sleep(30)\n",
+        encoding="utf-8",
+    )
+
+    with client.websocket_connect("/ws/run") as websocket:
+        websocket.send_json({
+            "action": "START",
+            "target_path": str(tmp_path),
+            "nodes": ["tests/test_hang.py"],
+        })
+        # Wait for the test to enter the silent sleep
+        deadline = time.monotonic() + 10.0
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert pid_file.exists(), "Subprocess did not start test_silent_hang in time"
+        child_pid = int(pid_file.read_text().strip())
+        assert _is_pid_alive(child_pid)
+
+        stop_sent_at = time.monotonic()
+        websocket.send_json({"action": "STOP"})
+
+        # Subprocess must be terminated within 1.5s (not waiting for the 30s sleep)
+        kill_deadline = time.monotonic() + 1.5
+        while _is_pid_alive(child_pid) and time.monotonic() < kill_deadline:
+            time.sleep(0.05)
+
+        elapsed = time.monotonic() - stop_sent_at
+        assert not _is_pid_alive(child_pid), f"Subprocess {child_pid} still alive after STOP ({elapsed:.2f}s)"
+        assert elapsed < 1.5
+
+
+def test_ws_run_disconnect_aborts_silent_subprocess_immediately(tmp_path):
+    """Verifies that closing the WebSocket during a silent sleep aborts the subprocess within ~1s."""
+    import time
+
+    pid_file = tmp_path / "disconnect_pid.txt"
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_hang_disconnect.py"
+    test_file.write_text(
+        "import os, pathlib, time\n"
+        "def test_silent_hang_disconnect():\n"
+        f"    pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+        "    time.sleep(30)\n",
+        encoding="utf-8",
+    )
+
+    with client.websocket_connect("/ws/run") as websocket:
+        websocket.send_json({
+            "action": "START",
+            "target_path": str(tmp_path),
+            "nodes": ["tests/test_hang_disconnect.py"],
+        })
+        deadline = time.monotonic() + 10.0
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert pid_file.exists(), "Subprocess did not start test_silent_hang_disconnect in time"
+        child_pid = int(pid_file.read_text().strip())
+        assert _is_pid_alive(child_pid)
+
+        disconnect_at = time.monotonic()
+        websocket.close()
+
+    kill_deadline = time.monotonic() + 1.5
+    while _is_pid_alive(child_pid) and time.monotonic() < kill_deadline:
+        time.sleep(0.05)
+
+    elapsed = time.monotonic() - disconnect_at
+    assert not _is_pid_alive(child_pid), f"Subprocess {child_pid} still alive after disconnect ({elapsed:.2f}s)"
+    assert elapsed < 1.5
+
+
+
 
