@@ -176,6 +176,27 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText())
     expect(clipboardText).toContain('[CRITICAL] Test execution stopped by user.')
     expect(clipboardText).not.toContain('\x1b[')
+
+    // 4. Verify stopped runs are recorded in Execution History with STOPPED badge and duration,
+    // and can be replayed after another run completes
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+    await page.click('.btn-primary')
+    await expect(stopBtn).toBeVisible({ timeout: 5000 })
+    await expect(stopBtn).not.toBeVisible({ timeout: 30000 })
+
+    await page.click('button:has-text("Execution History")')
+    const historyItems = page.locator('.history-item')
+    await expect(historyItems).toHaveCount(3)
+    await expect(historyItems.nth(0).locator('.history-status')).toHaveText('PASSED')
+    await expect(historyItems.nth(1).locator('.history-status')).toHaveText('STOPPED')
+    await expect(historyItems.nth(1).locator('.history-status')).toHaveClass(/stopped/)
+    await expect(historyItems.nth(1).locator('.history-duration')).toHaveText(/^(<1ms|\d+ms|\d+\.\d{2}s)$/)
+    await expect(historyItems.nth(2).locator('.history-status')).toHaveText('STOPPED')
+
+    // Click the STOPPED history item and verify Terminal Output replays the stopped run logs
+    await historyItems.nth(1).click()
+    await expect(xtermRows).toContainText('[CRITICAL] Test execution stopped by user.')
   })
 
 
