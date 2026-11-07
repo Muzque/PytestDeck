@@ -1072,7 +1072,7 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(rootDirRow).toHaveClass(/row-has-not-run/)
     await expect(rootDirRow.locator('.rollup-chip.passed')).toHaveText('6 ✓')
     await expect(rootDirRow.locator('.rollup-chip.skipped')).toHaveText('2 –')
-    await expect(rootDirRow.locator('.rollup-chip.not-run')).toHaveText('21 ○')
+    await expect(rootDirRow.locator('.rollup-chip.not-run')).toHaveText('41 ○')
 
     // 4. Verify fail > not-run priority (red) and skipped-only parent (no color) when expanded and collapsed
     await page.route('**/api/test-runs*', async (route) => {
@@ -1348,12 +1348,12 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
 
     await clearBtn.click()
 
-    // 4. Select entire root directory (tests/unit has 29 functions total) -> count is 29
+    // 4. Select entire root directory (tests/unit has 49 functions total) -> count is 49
     const rootDirRow = page.locator('.node-row:has(.type-badge.directory)').first()
     await rootDirRow.locator('.node-checkbox').click()
 
-    await expect(runBtn).toContainText('Run Selected (29)')
-    await expect(clearBtn).toHaveAttribute('title', 'Clear 29 selected tests')
+    await expect(runBtn).toContainText('Run Selected (49)')
+    await expect(clearBtn).toHaveAttribute('title', 'Clear 49 selected tests')
 
     await clearBtn.click()
     await expect(runBtn).toContainText('Run Selected (0)')

@@ -16,6 +16,7 @@ dependencies = [
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+addopts = "-n 2"
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s %(levelname)-10s - %(message)s"
@@ -24,4 +25,6 @@ markers = [
     "slow: marks tests as slow-running",
     "smoke: quick verification tests",
     "regression: regression test suite",
+    "api_mark: API integration verification tests",
 ]
+
