@@ -29,10 +29,15 @@ const startElapsedTimer = () => {
   }, 100)
 }
 
-const stopElapsedTimer = () => {
+const stopElapsedTimer = (updateFinal = false) => {
   if (elapsedTimer) {
     clearInterval(elapsedTimer)
     elapsedTimer = null
+  }
+  if (updateFinal && runStartMs > 0) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const sec = Math.max(0, (now - runStartMs) / 1000)
+    elapsedText.value = `${sec.toFixed(1)}s`
   }
 }
 
@@ -196,11 +201,17 @@ onUnmounted(() => {
   if (term) term.dispose()
 })
 
+watch(() => props.liveProgress?.runId, (newRunId) => {
+  if (newRunId && props.isRunning) {
+    startElapsedTimer()
+  }
+})
+
 watch(() => props.isRunning, (running) => {
   if (running) {
     startElapsedTimer()
   } else {
-    stopElapsedTimer()
+    stopElapsedTimer(true)
   }
   if (!running && !hasSessionStarted && preSessionBuffer.length > 0) {
     preSessionBuffer.forEach(line => term.write(line))
@@ -284,9 +295,14 @@ watch(currentTerminalFont, (newFontId) => {
         <span class="dot dot-yellow"></span>
         <span class="dot dot-green"></span>
         <span class="terminal-title">Terminal Output</span>
-        <div v-if="props.isRunning" class="terminal-live-counter">
+        <div
+          v-if="props.isRunning || props.liveProgress?.hasRun"
+          class="terminal-live-counter"
+          :class="props.isRunning ? 'is-running' : 'status-' + (props.liveProgress?.status || 'idle')"
+        >
           <span class="counter-progress">
-            ⏳ {{ props.liveProgress?.completed ?? 0 }} / {{ props.liveProgress?.total ?? 0 }}
+            {{ props.isRunning ? '⏳' : (props.liveProgress?.status === 'stopped' ? '⏹' : (props.liveProgress?.status === 'failed' ? '✗' : '✓')) }}
+            {{ props.liveProgress?.completed ?? 0 }} / {{ props.liveProgress?.total ?? 0 }}
           </span>
           <span v-if="props.liveProgress?.passed > 0" class="counter-chip passed">
             {{ props.liveProgress.passed }} ✓

@@ -486,6 +486,9 @@ export function useTestRunner() {
   const runHistory = ref([])
   const selectedHistoryId = ref(null)
   const liveRunProgress = ref({
+    hasRun: false,
+    runId: 0,
+    status: 'idle',
     total: 0,
     completed: 0,
     passed: 0,
@@ -573,6 +576,7 @@ export function useTestRunner() {
 
     activeRunOutcomes.set(targetKey, nextBucket)
     liveRunProgress.value = {
+      ...liveRunProgress.value,
       total,
       completed: passed + failed + skipped,
       passed,
@@ -1000,6 +1004,9 @@ export function useTestRunner() {
       methodOutputs.value = nextOutputs
     }
     liveRunProgress.value = {
+      hasRun: true,
+      runId: Date.now(),
+      status: 'running',
       total: activeRunOutcomes.size,
       completed: 0,
       passed: 0,
@@ -1014,6 +1021,10 @@ export function useTestRunner() {
       runSettled = true
       appendLog('\r\n\x1b[1;31m[ERROR] WebSocket connection lost during test execution.\x1b[0m\r\n')
       isRunning.value = false
+      liveRunProgress.value = {
+        ...liveRunProgress.value,
+        status: 'stopped'
+      }
       liveMethodRun.value = null
       restoreRunningOutputs()
       ws = null
@@ -1123,6 +1134,9 @@ export function useTestRunner() {
                   mergedVal.duration = prevLive.duration
                 }
                 baseOutputs[canonicalKey] = mergedVal
+                if (mergedVal.outcome && mergedVal.outcome !== 'unknown') {
+                  updateLiveRunProgress(canonicalKey, mergedVal.outcome)
+                }
               }
               if (msg.branch !== undefined) {
                 currentBranch.value = msg.branch
@@ -1131,6 +1145,10 @@ export function useTestRunner() {
               writeBranchCache(targetPath.value, currentBranch.value ?? '', methodOutputs.value)
             } else {
               methodOutputs.value = baseOutputs
+            }
+            liveRunProgress.value = {
+              ...liveRunProgress.value,
+              status: msg.exit_code === 0 ? 'passed' : 'failed'
             }
             liveMethodRun.value = null
 
@@ -1150,6 +1168,10 @@ export function useTestRunner() {
             runSettled = true
             appendLog(`\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`)
             isRunning.value = false
+            liveRunProgress.value = {
+              ...liveRunProgress.value,
+              status: 'stopped'
+            }
             liveMethodRun.value = null
             restoreRunningOutputs()
           }
@@ -1205,6 +1227,12 @@ export function useTestRunner() {
       selectedHistoryId.value = historyRecord.id
     }
     isRunning.value = false
+    if (wasRunning) {
+      liveRunProgress.value = {
+        ...liveRunProgress.value,
+        status: 'stopped'
+      }
+    }
     liveMethodRun.value = null
     restoreRunningOutputs()
   }

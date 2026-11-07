@@ -1660,9 +1660,24 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     // As earlier tests complete while slow test is still running, passed chip appears in the live counter
     await expect(liveCounter.locator('.counter-chip.passed')).toBeVisible({ timeout: 10000 })
 
-    // Once execution completes, the live counter hides
+    // Once execution completes, the counter stays visible showing final 8 / 8 counts and timer
     await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 30000 })
-    await expect(liveCounter).toHaveCount(0)
+    await expect(liveCounter).toBeVisible()
+    await expect(liveCounter.locator('.counter-progress')).toContainText('8 / 8')
+    await expect(liveCounter.locator('.counter-chip.passed')).toHaveText('6 ✓')
+    await expect(liveCounter.locator('.counter-chip.skipped')).toHaveText('2 –')
+
+    // Triggering a new run refreshes the counter to the new selection (11 tests) and keeps it when stopped
+    await page.click('#btn-clear-selection')
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await calcFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+    await expect(liveCounter.locator('.counter-progress')).toContainText('/ 11')
+    await page.locator('#btn-stop-execution').click()
+    await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 10000 })
+    await expect(liveCounter).toBeVisible()
+    await expect(liveCounter.locator('.counter-progress')).toContainText('⏹')
+    await expect(liveCounter.locator('.counter-progress')).toContainText('/ 11')
   })
 })
 
