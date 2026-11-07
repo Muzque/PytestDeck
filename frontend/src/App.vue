@@ -147,7 +147,7 @@ const { activeTooltip } = useTooltip()
             <TerminalView :logs="logs" :isRunning="isRunning" />
           </div>
 
-          <!-- Detail Info Tab (for Integration & Behave suites) -->
+          <!-- Detail Info Tab -->
           <div v-show="activeTab === 'detail'" class="tab-pane detail-pane">
             <TestDetailView 
               :detail="selectedTestDetail" 

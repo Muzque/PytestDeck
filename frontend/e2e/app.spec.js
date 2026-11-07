@@ -232,6 +232,48 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('.docstring-card')).toBeVisible()
   })
 
+  test('should display Detail Info tab when a single test function is selected in Unit Tests suite', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Default active suite is Unit Tests (index 0)
+    await expect(page.locator('.tab-btn-detail')).not.toBeVisible()
+
+    // Expand test_calculator.py and select a single test function
+    const calcFileRow = page.locator('.node-row:has-text("test_calculator.py")')
+    await expect(calcFileRow).toBeVisible({ timeout: 15000 })
+    await calcFileRow.locator('.toggle-icon').click()
+
+    const funcRow = page.locator('.node-row:has(.type-badge.function)').first()
+    await expect(funcRow).toBeVisible({ timeout: 15000 })
+    await funcRow.click()
+
+    // Detail Info tab should appear and become active
+    const detailTabBtn = page.locator('.tab-btn-detail')
+    await expect(detailTabBtn).toBeVisible()
+    await expect(detailTabBtn).toHaveClass(/active/)
+    await expect(page.locator('.detail-pane')).toBeVisible()
+    await expect(page.locator('.detail-title')).toBeVisible()
+    await expect(page.locator('.docstring-card')).toBeVisible()
+
+    // Run single unit test method via ▶ Run Test (-s) button and verify status badge updates
+    const runMethodBtn = page.locator('.btn-run-method')
+    await expect(runMethodBtn).toBeVisible()
+    await runMethodBtn.click()
+    await expect(page.locator('.run-status-badge')).toBeVisible({ timeout: 20000 })
+    await expect(runMethodBtn).toBeEnabled({ timeout: 10000 })
+
+    // Clean up auto-appended -s flag
+    const clearAllBtn = page.locator('.btn-clear-all')
+    if (await clearAllBtn.isVisible()) {
+      await clearAllBtn.click()
+    }
+
+    // Selecting a whole file (multiple functions) hides Detail Info tab and returns to Terminal Output
+    await calcFileRow.locator('.node-checkbox').click()
+    await expect(detailTabBtn).not.toBeVisible()
+    await expect(page.locator('.terminal-container')).toBeVisible()
+  })
+
   test('should display Detail Info tab when a single scenario is selected in Behave acceptance suite', async ({ page }) => {
     await page.waitForSelector('.tree-container', { timeout: 60000 })
 

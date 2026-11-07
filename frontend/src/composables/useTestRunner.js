@@ -13,8 +13,7 @@ export function useTestRunner() {
   const isLoadingDetail = ref(false)
 
   const isDetailSuite = computed(() => {
-    const s = (activeSuite.value || '').toLowerCase()
-    return s.includes('integration') || s.includes('acceptance') || s.endsWith('.feature')
+    return Boolean(activeSuite.value)
   })
 
   const findNodeById = (root, id) => {
