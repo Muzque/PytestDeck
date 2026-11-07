@@ -10,6 +10,13 @@ const emit = defineEmits(['select-history'])
 const ANSI_REGEX = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
 
 const extractDurationSeconds = (item) => {
+  if (item?.duration !== null && item?.duration !== undefined) {
+    const directNum = Number(item.duration)
+    if (!Number.isNaN(directNum) && directNum >= 0) {
+      return directNum
+    }
+  }
+
   const reportDuration = item?.summary?.report?.duration
   if (reportDuration !== null && reportDuration !== undefined) {
     const num = Number(reportDuration)
@@ -31,6 +38,18 @@ const extractDurationSeconds = (item) => {
   }
 
   return null
+}
+
+const isStoppedItem = (item) => item?.status === 'stopped'
+
+const getStatusLabel = (item) => {
+  if (isStoppedItem(item)) return 'STOPPED'
+  return item?.exitCode === 0 ? 'PASSED' : 'FAILED'
+}
+
+const getStatusClass = (item) => {
+  if (isStoppedItem(item)) return 'stopped'
+  return item?.exitCode === 0 ? 'pass' : 'fail'
 }
 
 const formatRunDuration = (item) => {
@@ -62,8 +81,8 @@ const formatRunDuration = (item) => {
           <span class="history-time">{{ item.timestamp }}</span>
           <span class="history-suite">{{ item.suite }}</span>
           <span v-if="formatRunDuration(item)" class="history-duration">{{ formatRunDuration(item) }}</span>
-          <span class="history-status" :class="{ pass: item.exitCode === 0, fail: item.exitCode !== 0 }">
-            {{ item.exitCode === 0 ? 'PASSED' : 'FAILED' }}
+          <span class="history-status" :class="getStatusClass(item)">
+            {{ getStatusLabel(item) }}
           </span>
         </div>
         <div v-if="item.summary?.report?.summary" class="history-details">

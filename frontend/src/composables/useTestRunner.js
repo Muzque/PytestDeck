@@ -493,6 +493,7 @@ export function useTestRunner() {
   const selectedHistoryId = ref(null)
 
   let ws = null
+  let currentRunStartTime = null
   let preRunMethodOutputs = null
   let currentLiveNodeId = null
   let currentLiveNodeStartTime = null
@@ -888,7 +889,8 @@ export function useTestRunner() {
     activeTab.value = 'live'
     currentLiveNodeId = null
     currentLiveNodeStartTime = null
-    lastLiveStepTime = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    currentRunStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    lastLiveStepTime = currentRunStartTime
     currentLiveFeatureFile = null
     currentLiveScenarioOutcome = null
 
@@ -1050,10 +1052,12 @@ export function useTestRunner() {
             }
             liveMethodRun.value = null
 
+            currentRunStartTime = null
             const historyRecord = {
               id: Date.now(),
               timestamp: new Date().toLocaleTimeString(),
               suite: activeSuite.value,
+              status: msg.exit_code === 0 ? 'passed' : 'failed',
               exitCode: msg.exit_code,
               logs: [...logs.value],
               summary: msg.summary
@@ -1087,6 +1091,7 @@ export function useTestRunner() {
   }
 
   const stopTests = () => {
+    const wasRunning = isRunning.value
     if (ws) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ action: 'STOP' }))
@@ -1099,6 +1104,24 @@ export function useTestRunner() {
       ws = null
     }
     appendLog('\r\n\x1b[1;31m[CRITICAL] Test execution stopped by user.\x1b[0m\r\n')
+    if (wasRunning) {
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      const elapsedSeconds =
+        currentRunStartTime !== null ? Math.max(0, (now - currentRunStartTime) / 1000) : null
+      currentRunStartTime = null
+      const historyRecord = {
+        id: Date.now(),
+        timestamp: new Date().toLocaleTimeString(),
+        suite: activeSuite.value,
+        status: 'stopped',
+        exitCode: null,
+        duration: elapsedSeconds,
+        logs: [...logs.value],
+        summary: null
+      }
+      runHistory.value.unshift(historyRecord)
+      selectedHistoryId.value = historyRecord.id
+    }
     isRunning.value = false
     liveMethodRun.value = null
     restoreRunningOutputs()
