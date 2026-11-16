@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 # Load .env file from root or working directory if present
 load_dotenv(find_dotenv(usecwd=True))
 
+from api.api_deck import router as api_deck_router
 from api.config import router as config_router
 from api.discover import router as discover_router
 from api.health import router as health_router
@@ -33,6 +34,7 @@ app.include_router(discover_router)
 app.include_router(runner_router)
 app.include_router(history_router)
 app.include_router(run_options_router)
+app.include_router(api_deck_router)
 
 frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 

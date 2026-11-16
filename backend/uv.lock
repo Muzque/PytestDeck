@@ -578,6 +578,7 @@ source = { editable = "." }
 dependencies = [
     { name = "behave" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "pydantic" },
     { name = "pytest-json-report" },
     { name = "pytest-xdist" },
@@ -598,6 +599,7 @@ dev = [
 requires-dist = [
     { name = "behave", specifier = ">=1.2.6" },
     { name = "fastapi", specifier = ">=0.110.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "pydantic", specifier = ">=2.6.0" },
     { name = "pytest-json-report", specifier = ">=1.5.0" },
     { name = "pytest-xdist", specifier = ">=3.5.0" },
