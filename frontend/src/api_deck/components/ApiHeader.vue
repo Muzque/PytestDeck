@@ -1,4 +1,6 @@
 <script setup>
+import { useApiTheme } from '../composables/useApiTheme'
+
 defineProps({
   targetPath: { type: String, default: '' },
   apiEnvironments: { type: Array, default: () => [] },
@@ -11,6 +13,8 @@ const emit = defineEmits([
   'select-api-env',
   'switch-mode'
 ])
+
+const { currentTheme, themes } = useApiTheme()
 </script>
 
 <template>
@@ -50,6 +54,12 @@ const emit = defineEmits([
             ⇄
           </button>
         </div>
+
+        <select v-model="currentTheme" class="theme-select" title="Switch Theme">
+          <option v-for="t in themes" :key="t.id" :value="t.id">
+            {{ t.label }}
+          </option>
+        </select>
       </div>
     </div>
 

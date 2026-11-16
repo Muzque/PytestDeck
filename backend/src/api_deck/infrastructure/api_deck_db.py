@@ -68,12 +68,14 @@ class ApiDeckDatabase:
         if db_path:
             self.db_path = Path(db_path)
         else:
-            custom_env = os.environ.get("PYTESTDECK_DB_PATH")
+            custom_env = os.environ.get("PYTESTDECK_API_DB_PATH") or os.environ.get(
+                "PYTESTDECK_DB_PATH"
+            )
             if custom_env:
                 self.db_path = Path(custom_env)
             else:
                 storage_dir = _resolve_api_storage_dir(target_path)
-                self.db_path = storage_dir / "history.db"
+                self.db_path = storage_dir / "api_deck.db"
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         resolved_key = str(self.db_path.resolve())
