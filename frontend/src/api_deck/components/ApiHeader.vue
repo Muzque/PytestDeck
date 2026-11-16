@@ -1,31 +1,16 @@
 <script setup>
-import { useTheme } from '../composables/useTheme'
-
-const props = defineProps({
-  targetPath: { type: String, required: true },
-  activeSuite: { type: String, required: true },
-  availableSuites: { type: Array, required: true },
-  envStatus: { type: Object, default: () => ({ ready: true, status: 'ready', message: '' }) },
-  activeMode: { type: String, default: 'tests' },
+defineProps({
+  targetPath: { type: String, default: '' },
   apiEnvironments: { type: Array, default: () => [] },
   activeApiEnv: { type: Object, default: () => ({}) }
 })
 
 const emit = defineEmits([
   'update:targetPath',
-  'update:activeSuite',
-  'update:activeMode',
-  'discover',
-  'open-env-logs',
   'open-api-env-modal',
-  'select-api-env'
+  'select-api-env',
+  'switch-mode'
 ])
-
-const { currentTheme, themes } = useTheme()
-
-const toggleMode = () => {
-  emit('update:activeMode', props.activeMode === 'api' ? 'tests' : 'api')
-}
 </script>
 
 <template>
@@ -34,42 +19,24 @@ const toggleMode = () => {
       <div class="brand-info">
         <img src="/favicon.svg" alt="PytestDeck Logo" class="brand-logo-img" />
         <h1>PytestDeck</h1>
-        <span 
-          class="env-status-badge" 
-          :class="'env-' + (envStatus?.status || 'ready')"
-          :title="(envStatus?.message || 'Target environment ready') + ' (Click to view logs)'"
-          role="button"
-          tabindex="0"
-          @click="emit('open-env-logs')"
-          @keydown.enter="emit('open-env-logs')"
-        >
-          <span class="status-dot"></span>
-          <span class="status-text">
-            {{ envStatus?.status === 'running' ? 'Preparing...' : (envStatus?.status === 'failed' ? 'Failed' : 'Ready') }}
-          </span>
-        </span>
       </div>
 
       <div class="header-right-controls">
-        <!-- Switch button between Tests UI and API Caller UI -->
         <div class="mode-switch-group" role="group" aria-label="Switch UI Mode">
           <button
             id="btn-mode-tests"
             type="button"
             class="mode-switch-btn"
-            :class="{ active: activeMode === 'tests' }"
             title="Switch to Pytest / Behave Test Runner"
-            @click="emit('update:activeMode', 'tests')"
+            @click="emit('switch-mode', 'tests')"
           >
             🧪 Tests
           </button>
           <button
             id="btn-mode-api"
             type="button"
-            class="mode-switch-btn"
-            :class="{ active: activeMode === 'api' }"
-            title="Switch to API Caller & Stress Test Deck"
-            @click="emit('update:activeMode', 'api')"
+            class="mode-switch-btn active"
+            title="API Caller & Stress Test Deck"
           >
             ⚡ API Deck
           </button>
@@ -77,18 +44,12 @@ const toggleMode = () => {
             id="btn-mode-switch"
             type="button"
             class="mode-QuickToggle"
-            :title="activeMode === 'api' ? 'Switch back to Tests' : 'Switch to API Deck'"
-            @click="toggleMode"
+            title="Switch back to Tests"
+            @click="emit('switch-mode', 'tests')"
           >
             ⇄
           </button>
         </div>
-
-        <select v-model="currentTheme" class="theme-select" title="Switch Theme">
-          <option v-for="t in themes" :key="t.id" :value="t.id">
-            {{ t.label }}
-          </option>
-        </select>
       </div>
     </div>
 
@@ -101,19 +62,7 @@ const toggleMode = () => {
         title="Target Repository Root Path"
         @input="emit('update:targetPath', $event.target.value)"
       />
-      <div v-if="activeMode === 'tests'" class="suite-control-row">
-        <select 
-          :value="activeSuite" 
-          class="suite-select" 
-          title="Select Active Test Suite"
-          @change="emit('update:activeSuite', $event.target.value); emit('discover')"
-        >
-          <option v-for="s in availableSuites" :key="s.path" :value="s.path">
-            {{ s.label }}
-          </option>
-        </select>
-      </div>
-      <div v-else class="suite-control-row api-env-row">
+      <div class="suite-control-row api-env-row">
         <select
           id="api-env-select"
           :value="activeApiEnv?.id || ''"

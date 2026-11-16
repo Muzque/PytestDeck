@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
@@ -6,16 +7,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+_SRC_DIR = Path(__file__).resolve().parent
+for _sub in (_SRC_DIR, _SRC_DIR / "test_deck"):
+    _sub_str = str(_sub)
+    if _sub_str not in sys.path:
+        sys.path.insert(0, _sub_str)
+
 # Load .env file from root or working directory if present
 load_dotenv(find_dotenv(usecwd=True))
 
-from api.api_deck import router as api_deck_router
-from api.config import router as config_router
-from api.discover import router as discover_router
-from api.health import router as health_router
-from api.history import router as history_router
-from api.history import run_options_router
-from api.runner import router as runner_router
+from api_deck.api.api_routes import router as api_deck_router
+from test_deck.api.config import router as config_router
+from test_deck.api.discover import router as discover_router
+from test_deck.api.health import router as health_router
+from test_deck.api.history import router as history_router
+from test_deck.api.history import run_options_router
+from test_deck.api.runner import router as runner_router
 
 app = FastAPI(title="PytestDeck Core API", version="0.1.0")
 
@@ -27,7 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API Routers
+# Include Test Deck & API Deck Routers
 app.include_router(health_router)
 app.include_router(config_router)
 app.include_router(discover_router)

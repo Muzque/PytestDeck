@@ -1,8 +1,34 @@
 import { ref, computed, watch, nextTick } from 'vue'
 
-export function useApiDeck(targetPathRef) {
+export function useApiDeck(externalTargetPathRef = null) {
+  const internalTargetPath = ref('')
+  const targetPathRef = externalTargetPathRef || internalTargetPath
   const activeMode = ref('tests')
   const apiActiveTab = ref('request')
+
+  const initDefaultTargetPath = async () => {
+    if (targetPathRef.value) return
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const fromUrl = params.get('target_path')
+      if (fromUrl) {
+        targetPathRef.value = fromUrl
+        return
+      }
+    }
+    try {
+      const res = await fetch('/api/config')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.default_target_path && !targetPathRef.value) {
+          targetPathRef.value = data.default_target_path
+        }
+      }
+    } catch {
+      // Ignore config fetch error
+    }
+  }
+  initDefaultTargetPath()
 
   const environments = ref([])
   const showEnvModal = ref(false)
@@ -565,6 +591,7 @@ export function useApiDeck(targetPathRef) {
   }
 
   return {
+    targetPath: targetPathRef,
     activeMode,
     apiActiveTab,
     environments,

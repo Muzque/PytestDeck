@@ -35,6 +35,9 @@ dev = [
     "ruff>=0.3.0",
 ]
 
+[tool.ruff]
+src = ["src", "src/test_deck"]
+
 [tool.ruff.lint]
 ignore = [
     "BLE001",

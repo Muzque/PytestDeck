@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from infrastructure.api_runner_service import (
+from api_deck.infrastructure.api_runner_service import (
     build_resolved_request,
     execute_batch_requests,
     execute_single_request,
