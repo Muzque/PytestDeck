@@ -113,6 +113,7 @@ class SubprocessRunnerService:
         env["PYTHONUNBUFFERED"] = "1"
         env["PY_COLORS"] = "1"
         env["FORCE_COLOR"] = "1"
+        env["PYTESTDECK_RUNNER"] = "1"
         apply_target_venv(env)
 
         # Ensure target repository root, target src (if exists), and PytestDeck backend/src are on PYTHONPATH
@@ -219,6 +220,11 @@ class SubprocessRunnerService:
                 summary["report_error"] = str(e)
 
         method_outputs = output_collector.get_results()
+        if resolved_runner_type == RunnerType.BEHAVE and exit_code == 0:
+            for rec in method_outputs.values():
+                if rec.get("outcome") in ("unknown", "failed", "error"):
+                    rec["outcome"] = "passed"
+
 
         if "report" not in summary and "report_error" not in summary and method_outputs:
             passed_count = sum(

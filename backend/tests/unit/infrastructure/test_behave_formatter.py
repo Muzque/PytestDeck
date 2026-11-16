@@ -120,3 +120,35 @@ def test_append_pretty_formatter_result_prints_error_message():
     assert "an action fails" in rendered
     assert "AssertionError: Something went wrong" in rendered
     assert not any(f"\x1b[{i}A" in rendered for i in range(1, 10))
+
+
+def test_append_pretty_formatter_emits_structured_scenario_event(monkeypatch):
+    """Verifies that AppendPrettyFormatter emits __PYTESTDECK_EVENT__ when a scenario finishes under PytestDeck."""
+    import json
+
+    monkeypatch.setenv("PYTESTDECK_RUNNER", "1")
+    output = io.StringIO()
+    mock_config = MagicMock()
+    mock_config.show_source = True
+    mock_config.show_timings = True
+    mock_config.show_multiline = True
+
+    formatter = AppendPrettyFormatter(DummyStreamOpener(output), mock_config)
+    mock_scenario = MagicMock()
+    mock_scenario.name = "Process 19-step workflow -- @1.1 "
+    mock_scenario.location.filename = "tests/acceptance/features/order.feature"
+    mock_scenario.status = Status.passed
+    mock_scenario.duration = 301.539
+    mock_scenario.captured.has_output.return_value = False
+
+    formatter.current_scenario = mock_scenario
+    formatter._finish_current_scenario()
+
+    rendered = output.getvalue()
+    assert "__PYTESTDECK_EVENT__:" in rendered
+    payload_str = rendered.split("__PYTESTDECK_EVENT__:", 1)[1].splitlines()[0]
+    ev = json.loads(payload_str)
+    assert ev["node_id"] == "tests/acceptance/features/order.feature::Process 19-step workflow"
+    assert ev["outcome"] == "passed"
+    assert ev["duration"] == 301.539
+

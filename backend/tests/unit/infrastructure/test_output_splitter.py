@@ -308,4 +308,43 @@ def test_method_output_collector_xdist_and_status_events():
     assert res["tests/unit/test_calc.py::test_sub"]["duration"] == 0.0456
 
 
+def test_behave_passing_scenario_with_red_logs_and_failed_words_remains_passed():
+    """Verifies Issue #60: passing Behave scenarios that emit red ANSI logs, 'FAILED' text, or caught tracebacks are marked passed."""
+    text = (
+        "Feature: Order Pipeline # features/order.feature:1\n"
+        "\n"
+        "  Scenario: Process 19-step workflow # features/order.feature:3\n"
+        "    Given the order pipeline is initialized # features/steps/order_steps.py:5 0.120s\n"
+        "\x1b[31mLOG_WARN: Retrying transient FAILED webhook response\x1b[0m\n"
+        "Traceback (most recent call last):\n"
+        "  File \"webhook.py\", line 10, in send\n"
+        "ConnectionError: handled expected error\n"
+        "    When 19 steps execute and recover # features/steps/order_steps.py:12 301.419s\n"
+        "    Then the workflow completes cleanly # features/steps/order_steps.py:20 0.000s\n"
+        "\n"
+        "1 feature passed, 0 failed, 0 skipped\n"
+        "1 scenario passed, 0 failed, 0 skipped\n"
+        "19 steps passed, 0 failed, 0 skipped\n"
+        "Took 5min 1.539s\n"
+    )
+
+    # 1. Multi-node collection
+    collector = MethodOutputCollector()
+    for line in text.splitlines(keepends=True):
+        collector.process_line(line)
+    res = collector.get_results()
+    node_key = "features/order.feature::Process 19-step workflow"
+    assert node_key in res
+    assert res[node_key]["outcome"] == "passed"
+
+    # 2. Single-node targeted collection
+    single_collector = MethodOutputCollector(requested_nodes=[node_key])
+    assert single_collector.is_single_node is True
+    for line in text.splitlines(keepends=True):
+        single_collector.process_line(line)
+    single_res = single_collector.get_results()
+    assert single_res[node_key]["outcome"] == "passed"
+
+
+
 

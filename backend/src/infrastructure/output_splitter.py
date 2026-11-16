@@ -11,6 +11,25 @@ BEHAVE_SCENARIO_PATTERN = re.compile(r"^(?:Scenario|Scenario Outline):\s*(.*?)(?
 
 BEHAVE_FEATURE_PATTERN = re.compile(r"^Feature:\s*(.*?)(?:\s+#\s*([^\s:]+\.feature)(?::\d+)?)?$")
 BEHAVE_STEP_DURATION_PATTERN = re.compile(r"#\s+\S+:\d+\s+(\d+(?:\.\d+)?)s\s*$")
+BEHAVE_STEP_PREFIX_PATTERN = re.compile(r"^\s*(?:Given|When|Then|And|But|\*)\s+")
+BEHAVE_INDENTED_ERROR_PATTERN = re.compile(
+    r"^\s{4,}(?:Assertion Failed:|AssertionError\b|Traceback \(most recent call last\):)"
+)
+BEHAVE_ALL_PASSED_SUMMARY_PATTERN = re.compile(
+    r"^\d+\s+(?:features?|scenarios?)\s+passed,\s*0\s+failed\b"
+)
+
+
+def _is_behave_failure_line(raw_line: str, clean_line: str) -> bool:
+    """Checks whether a line inside a Behave scenario represents an actual Behave step failure."""
+    if BEHAVE_INDENTED_ERROR_PATTERN.match(clean_line):
+        return True
+    return bool(
+        "\x1b[31m" in raw_line
+        and BEHAVE_STEP_PREFIX_PATTERN.match(clean_line)
+        and BEHAVE_STEP_DURATION_PATTERN.search(clean_line)
+    )
+
 
 
 def _extract_pytest_node_id(line: str) -> str | None:
@@ -59,8 +78,9 @@ class MethodOutputCollector:
             if "::" in req:
                 parts = req.split("::")
                 leaf = parts[-1]
-                # A class node has 2 parts where the second part starts with capital and not test_
-                if not (len(parts) == 2 and leaf[0].isupper() and not leaf.startswith("test_")):
+                if parts[0].endswith(".feature") or not (
+                    len(parts) == 2 and leaf[0].isupper() and not leaf.startswith("test_")
+                ):
                     is_single_leaf = True
         self.is_single_node = is_single_leaf
         self.single_node_id = self.requested_nodes[0] if self.is_single_node else None
@@ -112,18 +132,24 @@ class MethodOutputCollector:
         if self.is_single_node and self.single_node_id:
             self.method_outputs[self.single_node_id]["lines"].append(raw_line)
             self._accumulate_behave_step_duration(self.single_node_id, clean)
+            if ".feature::" in self.single_node_id:
+                if BEHAVE_ALL_PASSED_SUMMARY_PATTERN.match(stripped):
+                    self.method_outputs[self.single_node_id]["outcome"] = "passed"
+                elif _is_behave_failure_line(raw_line, clean):
+                    self.method_outputs[self.single_node_id]["outcome"] = "failed"
+                elif (
+                    re.match(r"^\d+\s+features?\s+passed", stripped)
+                    and self.method_outputs[self.single_node_id]["outcome"] == "unknown"
+                ):
+                    self.method_outputs[self.single_node_id]["outcome"] = "passed"
+                return
+
             if "PASSED" in clean and self.method_outputs[self.single_node_id]["outcome"] == "unknown":
                 self.method_outputs[self.single_node_id]["outcome"] = "passed"
             elif "FAILED" in clean or "\x1b[31m" in raw_line or "Assertion Failed:" in clean or "Traceback (most recent call last):" in clean:
                 self.method_outputs[self.single_node_id]["outcome"] = "failed"
             elif "SKIPPED" in clean and self.method_outputs[self.single_node_id]["outcome"] == "unknown":
                 self.method_outputs[self.single_node_id]["outcome"] = "skipped"
-            elif (
-                ".feature::" in self.single_node_id
-                and re.match(r"^\d+\s+features?\s+passed", stripped)
-                and self.method_outputs[self.single_node_id]["outcome"] == "unknown"
-            ):
-                self.method_outputs[self.single_node_id]["outcome"] = "passed"
             return
 
         # Check for Behave feature header
@@ -213,30 +239,37 @@ class MethodOutputCollector:
                 self.method_outputs[self.current_failure_node]["lines"].append(raw_line)
                 return
 
+        if BEHAVE_ALL_PASSED_SUMMARY_PATTERN.match(stripped):
+            for nid, data in self.method_outputs.items():
+                if ".feature::" in nid and data["outcome"] in ("unknown", "failed"):
+                    data["outcome"] = "passed"
+            self.current_node = None
+            return
+
         # Regular lines during test method execution
         if self.current_node and self.current_node in self.method_outputs:
             if stripped.startswith(("=====", "short test summary")):
                 self.current_node = None
                 return
-            if ".feature::" in self.current_node and (
-                re.match(r"^\d+\s+features?\s+passed", stripped)
-                or stripped.startswith("Failing scenarios:")
-            ):
-                if self.method_outputs[self.current_node]["outcome"] == "unknown":
-                    self.method_outputs[self.current_node]["outcome"] = "passed"
-                self.current_node = None
+            if ".feature::" in self.current_node:
+                if (
+                    re.match(r"^\d+\s+features?\s+passed", stripped)
+                    or stripped.startswith("Failing scenarios:")
+                ):
+                    if self.method_outputs[self.current_node]["outcome"] == "unknown":
+                        self.method_outputs[self.current_node]["outcome"] = "passed"
+                    self.current_node = None
+                    return
+                self.method_outputs[self.current_node]["lines"].append(raw_line)
+                self._accumulate_behave_step_duration(self.current_node, clean)
+                if _is_behave_failure_line(raw_line, clean):
+                    self.method_outputs[self.current_node]["outcome"] = "failed"
                 return
+
             self.method_outputs[self.current_node]["lines"].append(raw_line)
-            self._accumulate_behave_step_duration(self.current_node, clean)
             if "PASSED" in clean and self.method_outputs[self.current_node]["outcome"] == "unknown":
                 self.method_outputs[self.current_node]["outcome"] = "passed"
-            elif (
-                "FAILED" in clean
-                or (
-                    ".feature::" in self.current_node
-                    and ("\x1b[31m" in raw_line or "Assertion Failed:" in clean or "Traceback (most recent call last):" in clean)
-                )
-            ):
+            elif "FAILED" in clean:
                 self.method_outputs[self.current_node]["outcome"] = "failed"
             elif "SKIPPED" in clean and self.method_outputs[self.current_node]["outcome"] == "unknown":
                 self.method_outputs[self.current_node]["outcome"] = "skipped"
