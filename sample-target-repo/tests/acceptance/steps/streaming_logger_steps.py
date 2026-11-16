@@ -19,6 +19,7 @@ def step_log_progress(context):
     logger.info("Step 2: Processing batch 2 of calculations...")
     time.sleep(0.2)
     logger.warning("Step 2: Completed processing with warning flag set")
+    logger.error("Step 2: Handled transient FAILED upstream response and recovered")
     context.step_count += 1
 
 

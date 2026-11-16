@@ -1679,6 +1679,44 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(liveCounter.locator('.counter-progress')).toContainText('⏹')
     await expect(liveCounter.locator('.counter-progress')).toContainText('/ 11')
   })
+
+  test('should display passed status on DirectoryTree for Behave scenario that logs red ERROR and FAILED messages', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // Switch to Acceptance (Behave) suite in sample-target-repo
+    await page.selectOption('.suite-select', 'tests/acceptance')
+    const streamingFeatureRow = page.locator('.node-row:has-text("streaming_logger.feature")')
+    await expect(streamingFeatureRow).toBeVisible({ timeout: 30000 })
+
+    // Expand streaming_logger.feature and select its scenario
+    await streamingFeatureRow.locator('.node-name').click()
+    const scenarioRow = page.locator('.node-row:has-text("Sequential steps with live logging progression")')
+    await expect(scenarioRow).toBeVisible()
+    await scenarioRow.locator('.node-checkbox').click()
+
+    // Run the selected Behave scenario
+    await page.locator('.btn-primary').click()
+    await expect(page.locator('#btn-stop-execution')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 30000 })
+
+    // Verify DirectoryTree shows passed (green ✓) and NOT failed for both scenario and feature row
+    await expect(scenarioRow).toHaveClass(/row-outcome-passed/)
+    await expect(scenarioRow).not.toHaveClass(/row-outcome-failed/)
+    await expect(streamingFeatureRow).toHaveClass(/row-has-passed/)
+    await expect(streamingFeatureRow).not.toHaveClass(/row-has-failed/)
+    await expect(streamingFeatureRow.locator('.rollup-chip.passed')).toHaveText('1 ✓')
+
+    // Also run the entire Acceptance (Behave) suite (Run All Tests) and verify all 3 features pass
+    await page.click('#btn-clear-selection')
+    await page.locator('.btn-primary').click()
+    await expect(page.locator('#btn-stop-execution')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 30000 })
+
+    await expect(streamingFeatureRow).toHaveClass(/row-has-passed/)
+    await expect(streamingFeatureRow).not.toHaveClass(/row-has-failed/)
+    await expect(page.locator('.node-row:has-text("calculator.feature")')).toHaveClass(/row-has-passed/)
+    await expect(page.locator('.node-row:has-text("workload_analytics.feature")')).toHaveClass(/row-has-passed/)
+  })
 })
 
 

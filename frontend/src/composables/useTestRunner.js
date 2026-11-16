@@ -671,10 +671,20 @@ export function useTestRunner() {
 
       // Check for Behave failure or summary line while in a scenario
       if (currentLiveScenarioOutcome && currentLiveNodeId) {
-        if (/^(AssertionError|Traceback|FAILED)/i.test(stripped) || rawLine.includes('\x1b[31m')) {
+        const isBehaveStepLine = /^\s*(?:Given|When|Then|And|But|\*)\s+/.test(clean) && /#\s+\S+:\d+\s+\d+(?:\.\d+)?s\s*$/.test(clean)
+        const isIndentedStepError = /^\s{4,}(?:Assertion Failed:|AssertionError\b|Traceback \(most recent call last\):)/.test(clean)
+        if ((isBehaveStepLine && rawLine.includes('\x1b[31m')) || isIndentedStepError) {
           currentLiveScenarioOutcome = 'failed'
         }
-        if (/^\d+\s+features?\s+passed/.test(stripped)) {
+        if (/^\d+\s+(?:features?|scenarios?)\s+passed,\s*0\s+failed\b/.test(stripped)) {
+          currentLiveScenarioOutcome = 'passed'
+          const dur = currentLiveNodeStartTime ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
+          applyLiveOutcome(currentLiveNodeId, 'passed', dur)
+          currentLiveNodeId = null
+          currentLiveScenarioOutcome = null
+          continue
+        }
+        if (/^\d+\s+features?\s+passed/.test(stripped) || stripped.startsWith('Failing scenarios:')) {
           const dur = currentLiveNodeStartTime ? Math.max(0, (now - currentLiveNodeStartTime) / 1000) : null
           applyLiveOutcome(currentLiveNodeId, currentLiveScenarioOutcome, dur)
           currentLiveNodeId = null
