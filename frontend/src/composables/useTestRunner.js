@@ -557,13 +557,35 @@ export function useTestRunner() {
     return null
   }
 
+  const resolveActiveRunKey = (nodeId) => {
+    if (!nodeId || activeRunOutcomes.size === 0) return null
+    if (activeRunOutcomes.has(nodeId)) return nodeId
+    let bestKey = null
+    let bestDiff = Infinity
+    for (const key of activeRunOutcomes.keys()) {
+      if (isSameTestNodeId(key, nodeId)) {
+        const diff = Math.abs(key.length - nodeId.length)
+        if (diff < bestDiff) {
+          bestDiff = diff
+          bestKey = key
+        }
+      }
+    }
+    return bestKey
+  }
+
   const updateLiveRunProgress = (targetKey, outcome) => {
     const nextBucket = normalizeProgressBucket(outcome)
     if (!nextBucket) return
-    const prevBucket = activeRunOutcomes.get(targetKey)
+    const resolvedKey = resolveActiveRunKey(targetKey)
+    if (activeRunOutcomes.size > 0 && !resolvedKey) {
+      return
+    }
+    const progressKey = resolvedKey || targetKey
+    const prevBucket = activeRunOutcomes.get(progressKey)
     if (prevBucket === nextBucket) return
     let { total, passed, failed, skipped } = liveRunProgress.value
-    if (!activeRunOutcomes.has(targetKey)) {
+    if (!activeRunOutcomes.has(progressKey)) {
       total += 1
     }
     if (prevBucket === 'passed') passed = Math.max(0, passed - 1)
@@ -574,7 +596,7 @@ export function useTestRunner() {
     else if (nextBucket === 'failed') failed += 1
     else if (nextBucket === 'skipped') skipped += 1
 
-    activeRunOutcomes.set(targetKey, nextBucket)
+    activeRunOutcomes.set(progressKey, nextBucket)
     liveRunProgress.value = {
       ...liveRunProgress.value,
       total,
@@ -588,33 +610,31 @@ export function useTestRunner() {
   const applyLiveOutcome = (nodeId, outcome, duration = null) => {
     if (!nodeId || !outcome) return
     const current = methodOutputs.value
+    const activeKey = resolveActiveRunKey(nodeId)
     const bestKey = findNodeKey(current, nodeId)
-    const targetKey = bestKey || nodeId
-    updateLiveRunProgress(targetKey, outcome)
-    if (bestKey) {
-      const existing = current[bestKey]
-      const nextDuration = duration !== null ? duration : existing?.duration ?? null
-      if (existing && existing.outcome === outcome && existing.duration === nextDuration) {
-        return
-      }
-      methodOutputs.value = {
-        ...current,
-        [bestKey]: {
-          ...existing,
-          outcome,
-          duration: nextDuration
-        }
-      }
-    } else {
-      methodOutputs.value = {
-        ...current,
-        [nodeId]: {
-          node_id: nodeId,
-          outcome,
-          duration
-        }
-      }
+    const canonicalKey = activeKey || (bestKey && bestKey.length >= nodeId.length ? bestKey : nodeId)
+    updateLiveRunProgress(canonicalKey, outcome)
+    const existing = current[canonicalKey] || (bestKey ? current[bestKey] : null)
+    const nextDuration = duration !== null ? duration : existing?.duration ?? null
+    if (
+      current[canonicalKey] &&
+      (!bestKey || bestKey === canonicalKey) &&
+      current[canonicalKey].outcome === outcome &&
+      current[canonicalKey].duration === nextDuration
+    ) {
+      return
     }
+    const nextOutputs = { ...current }
+    if (bestKey && bestKey !== canonicalKey) {
+      delete nextOutputs[bestKey]
+    }
+    nextOutputs[canonicalKey] = {
+      ...(existing || { node_id: canonicalKey }),
+      node_id: canonicalKey,
+      outcome,
+      duration: nextDuration
+    }
+    methodOutputs.value = nextOutputs
   }
 
   const mapPytestToken = (token) => {
@@ -1003,13 +1023,17 @@ export function useTestRunner() {
       const nextOutputs = { ...preRunMethodOutputs }
       for (const leafId of runningLeafIds) {
         const existingKey = findNodeKey(preRunMethodOutputs, leafId)
-        const targetKey = existingKey || leafId
-        nextOutputs[targetKey] = {
-          ...(nextOutputs[targetKey] || { node_id: targetKey }),
+        const prevEntry = existingKey ? preRunMethodOutputs[existingKey] : preRunMethodOutputs[leafId]
+        if (existingKey && existingKey !== leafId) {
+          delete nextOutputs[existingKey]
+        }
+        nextOutputs[leafId] = {
+          ...(prevEntry || { node_id: leafId }),
+          node_id: leafId,
           outcome: 'running',
           duration: null
         }
-        activeRunOutcomes.set(targetKey, 'running')
+        activeRunOutcomes.set(leafId, 'running')
       }
       methodOutputs.value = nextOutputs
     }

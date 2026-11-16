@@ -1678,6 +1678,15 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(liveCounter).toBeVisible()
     await expect(liveCounter.locator('.counter-progress')).toContainText('⏹')
     await expect(liveCounter.locator('.counter-progress')).toContainText('/ 11')
+
+    // Switch to Integration Tests (which has its own pytest.ini) and run all 33 tests:
+    // total must stay fixed at 33 (matching DirectoryTree) and never inflate to 66
+    await page.selectOption('.suite-select', 'tests/integration')
+    await expect(page.locator('.node-row:has-text("test_app_api.py")')).toBeVisible({ timeout: 30000 })
+    await page.locator('.btn-primary').click()
+    await expect(liveCounter.locator('.counter-progress')).toContainText('/ 33')
+    await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 30000 })
+    await expect(liveCounter.locator('.counter-progress')).toContainText('33 / 33')
   })
 
   test('should display passed status on DirectoryTree for Behave scenario that logs red ERROR and FAILED messages', async ({ page }) => {
