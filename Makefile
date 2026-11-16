@@ -20,20 +20,20 @@ test: lint unit-test integration-test acceptance-test e2e-test ## Run linting, u
 
 lint: ## Run linter and code checks
 	@echo "Running Backend & Frontend Linting checks..."
-	cd backend && PYTHONPATH=src:src/api uv run ruff check src tests
+	cd backend && PYTHONPATH=$(CURDIR)/backend/src:$(CURDIR)/backend/src/test_deck:$(CURDIR)/backend/src/test_deck/api uv run ruff check src tests
 	cd frontend && npm run lint
 
 unit-test: ## Run unit tests
 	@echo "Running Unit Tests..."
-	cd backend && PYTHONPATH=src uv run pytest tests/unit
+	cd backend && PYTHONPATH=$(CURDIR)/backend/src:$(CURDIR)/backend/src/test_deck uv run pytest tests/unit
 
 integration-test: ## Run integration tests
 	@echo "Running Integration Tests..."
-	cd backend && PYTHONPATH=src uv run pytest tests/integration
+	cd backend && PYTHONPATH=$(CURDIR)/backend/src:$(CURDIR)/backend/src/test_deck uv run pytest tests/integration
 
 acceptance-test: ## Run acceptance / BDD tests (e.g. make acceptance-test FEATURES="tests/acceptance/features/self_test.feature")
 	@echo "Running Acceptance Tests..."
-	cd backend && PYTHONPATH=src uv run behave --color=always --no-capture-log -f infrastructure.behave_formatter:AppendPrettyFormatter $(if $(FEATURES),$(FEATURES),tests/acceptance/features)
+	cd backend && PYTHONPATH=$(CURDIR)/backend/src:$(CURDIR)/backend/src/test_deck uv run behave --color=always --no-capture-log -f infrastructure.behave_formatter:AppendPrettyFormatter $(if $(FEATURES),$(FEATURES),tests/acceptance/features)
 
 e2e-test: build-frontend ## Run frontend Playwright E2E tests
 	@echo "Running Frontend E2E Tests..."

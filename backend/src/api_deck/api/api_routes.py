@@ -3,12 +3,12 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from infrastructure.api_runner_service import (
+from api_deck.infrastructure.api_deck_db import ApiDeckDatabase
+from api_deck.infrastructure.api_runner_service import (
     execute_batch_requests,
     execute_single_request,
     execute_stress_test,
 )
-from infrastructure.history_db import HistoryDatabase
 
 router = APIRouter(prefix="/api/api-deck", tags=["api-deck"])
 
@@ -61,7 +61,7 @@ class StressApiRequest(BaseModel):
 
 
 def _resolve_active_env(
-    db: HistoryDatabase, explicit_env: dict[str, Any] | None
+    db: ApiDeckDatabase, explicit_env: dict[str, Any] | None
 ) -> dict[str, Any]:
     if explicit_env is not None:
         return explicit_env
@@ -77,7 +77,7 @@ async def get_api_deck_state(
     target_path: str = Query("", description="Target repository path"),
 ):
     try:
-        db = HistoryDatabase(target_path=target_path)
+        db = ApiDeckDatabase(target_path=target_path)
         envs = db.list_api_environments()
         nodes = db.list_api_nodes()
         return {
@@ -91,7 +91,7 @@ async def get_api_deck_state(
 @router.post("/environments")
 async def save_api_environment(req: SaveEnvironmentRequest):
     try:
-        db = HistoryDatabase(target_path=req.target_path)
+        db = ApiDeckDatabase(target_path=req.target_path)
         saved = db.save_api_environment(req.environment)
         return {
             "success": True,
@@ -105,7 +105,7 @@ async def save_api_environment(req: SaveEnvironmentRequest):
 @router.put("/environments/{env_id}/activate")
 async def activate_api_environment(env_id: str, req: ActivateEnvironmentRequest):
     try:
-        db = HistoryDatabase(target_path=req.target_path)
+        db = ApiDeckDatabase(target_path=req.target_path)
         db.set_active_api_environment(env_id)
         return {
             "success": True,
@@ -121,7 +121,7 @@ async def delete_api_environment(
     target_path: str = Query("", description="Target repository path"),
 ):
     try:
-        db = HistoryDatabase(target_path=target_path)
+        db = ApiDeckDatabase(target_path=target_path)
         deleted = db.delete_api_environment(env_id)
         return {
             "success": deleted,
@@ -134,7 +134,7 @@ async def delete_api_environment(
 @router.post("/nodes")
 async def upsert_api_node(req: UpsertApiNodeRequest):
     try:
-        db = HistoryDatabase(target_path=req.target_path)
+        db = ApiDeckDatabase(target_path=req.target_path)
         saved = db.upsert_api_node(req.node)
         return {
             "success": True,
@@ -148,7 +148,7 @@ async def upsert_api_node(req: UpsertApiNodeRequest):
 @router.post("/nodes/move")
 async def move_api_node(req: MoveApiNodeRequest):
     try:
-        db = HistoryDatabase(target_path=req.target_path)
+        db = ApiDeckDatabase(target_path=req.target_path)
         result = db.move_api_node(
             node_id=req.node_id,
             target_parent_id=req.target_parent_id,
@@ -171,7 +171,7 @@ async def delete_api_node(
     target_path: str = Query("", description="Target repository path"),
 ):
     try:
-        db = HistoryDatabase(target_path=target_path)
+        db = ApiDeckDatabase(target_path=target_path)
         deleted_count = db.delete_api_node(node_id)
         return {
             "success": deleted_count > 0,
@@ -185,7 +185,7 @@ async def delete_api_node(
 @router.post("/send")
 async def send_single_api(req: SendSingleApiRequest):
     try:
-        db = HistoryDatabase(target_path=req.target_path)
+        db = ApiDeckDatabase(target_path=req.target_path)
         saved_node = db.upsert_api_node(req.node)
         env = _resolve_active_env(db, req.environment)
         result = await execute_single_request(
@@ -242,7 +242,7 @@ def _collect_executable_nodes(
 @router.post("/run-batch")
 async def run_batch_apis(req: RunBatchApiRequest):
     try:
-        db = HistoryDatabase(target_path=req.target_path)
+        db = ApiDeckDatabase(target_path=req.target_path)
         all_nodes = db.list_api_nodes()
         target_nodes = _collect_executable_nodes(all_nodes, req.node_ids)
         env = _resolve_active_env(db, req.environment)
@@ -272,7 +272,7 @@ async def run_batch_apis(req: RunBatchApiRequest):
 @router.post("/stress")
 async def run_stress_api(req: StressApiRequest):
     try:
-        db = HistoryDatabase(target_path=req.target_path)
+        db = ApiDeckDatabase(target_path=req.target_path)
         saved_node = db.upsert_api_node(req.node)
         env = _resolve_active_env(db, req.environment)
         stress = await execute_stress_test(

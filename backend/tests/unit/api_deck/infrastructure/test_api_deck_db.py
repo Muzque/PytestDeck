@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from infrastructure.history_db import HistoryDatabase
+from api_deck.infrastructure.api_deck_db import ApiDeckDatabase
 
 
 def test_api_environments_crud_and_active_switch(tmp_path: Path):
     db_file = tmp_path / "history.db"
-    db = HistoryDatabase(target_path=tmp_path, db_path=db_file)
+    db = ApiDeckDatabase(target_path=tmp_path, db_path=db_file)
 
     assert db.list_api_environments() == []
 
@@ -55,7 +55,7 @@ def test_api_environments_crud_and_active_switch(tmp_path: Path):
 
 def test_api_nodes_upsert_group_move_and_cascade_delete(tmp_path: Path):
     db_file = tmp_path / "history.db"
-    db = HistoryDatabase(target_path=tmp_path, db_path=db_file)
+    db = ApiDeckDatabase(target_path=tmp_path, db_path=db_file)
 
     req1 = db.upsert_api_node(
         {
