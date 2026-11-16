@@ -1,5 +1,5 @@
 <script setup>
-import { defineProps, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineProps, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
@@ -78,6 +78,110 @@ const filterSessionLogs = (allLogs) => {
 }
 
 const copied = ref(false)
+const copiedFailed = ref(false)
+
+const extractFailedLogs = (allLogs, progress) => {
+  const displayLogs = filterSessionLogs(allLogs)
+  if (!displayLogs || displayLogs.length === 0) return ''
+  const cleanText = stripAnsi(displayLogs.join(''))
+  const lines = cleanText.split(/\r?\n/)
+
+  // 1. Pytest FAILURES / ERRORS / short test summary info section
+  const bannerIdx = lines.findIndex(line =>
+    /^={3,}\s*(?:FAILURES|ERRORS|short test summary info)\s*={3,}\s*$/i.test(line.trim())
+  )
+  if (bannerIdx !== -1) {
+    const tailLines = lines.slice(bannerIdx)
+    const hasActualFailure =
+      (progress?.failed || 0) > 0 ||
+      tailLines.some(l =>
+        /^={3,}\s*(?:FAILURES|ERRORS)\s*={3,}/i.test(l.trim()) ||
+        /^(?:FAILED|ERROR)\s+/i.test(l.trim()) ||
+        /\b[1-9]\d*\s+(?:failed|errors?)\b/i.test(l)
+      )
+    if (hasActualFailure) {
+      return tailLines.join('\n').trim()
+    }
+  }
+
+  // 2. Behave failing scenarios & failed scenario blocks
+  const failingScenariosIdx = lines.findIndex(line => line.trim().startsWith('Failing scenarios:'))
+  const hasBehaveFailedCount = lines.some(line =>
+    /^\d+\s+(?:features?|scenarios?|steps?)\s+passed,\s*[1-9]\d*\s+failed\b/i.test(line.trim())
+  )
+  if (failingScenariosIdx !== -1 || hasBehaveFailedCount) {
+    const sections = []
+    let currentScenarioLines = []
+    let currentScenarioFailed = false
+
+    const stopIdx = failingScenariosIdx !== -1 ? failingScenariosIdx : lines.length
+    for (let i = 0; i < stopIdx; i++) {
+      const line = lines[i]
+      const trimmed = line.trim()
+      if (/^(?:Scenario|Scenario Outline):/.test(trimmed)) {
+        if (currentScenarioLines.length > 0 && currentScenarioFailed) {
+          sections.push(currentScenarioLines.join('\n').trimEnd())
+        }
+        currentScenarioLines = [line]
+        currentScenarioFailed = false
+      } else if (currentScenarioLines.length > 0) {
+        if (/^\d+\s+features?\s+passed/i.test(trimmed)) {
+          if (currentScenarioFailed) {
+            sections.push(currentScenarioLines.join('\n').trimEnd())
+          }
+          currentScenarioLines = []
+          currentScenarioFailed = false
+        } else {
+          currentScenarioLines.push(line)
+          if (/^\s{4,}(?:Assertion Failed:|AssertionError\b|Traceback \(most recent call last\):)/.test(line)) {
+            currentScenarioFailed = true
+          }
+        }
+      }
+    }
+    if (currentScenarioLines.length > 0 && currentScenarioFailed) {
+      sections.push(currentScenarioLines.join('\n').trimEnd())
+    }
+    if (failingScenariosIdx !== -1) {
+      sections.push(lines.slice(failingScenariosIdx).join('\n').trim())
+    }
+    const combined = sections.filter(Boolean).join('\n\n').trim()
+    if (combined) return combined
+  }
+
+  // 3. Fallback when liveProgress reports failures (e.g. --tb=no or mid-run failure lines)
+  if ((progress?.failed || 0) > 0) {
+    const failureLines = lines.filter(line => {
+      const t = line.trim()
+      return (
+        /^(?:\[gw\d+\]\s+(?:\[\s*\d+%\]\s+)?)?(?:FAILED|ERROR)\s+/.test(t) ||
+        /\s+(?:FAILED|ERROR)(?:\s+\[\s*\d+%\]|\s*$)/.test(t) ||
+        /^E\s+/.test(t) ||
+        /\b[1-9]\d*\s+(?:failed|errors?)\b/i.test(t)
+      )
+    })
+    if (failureLines.length > 0) {
+      return failureLines.join('\n').trim()
+    }
+  }
+
+  return ''
+}
+
+const failedLogsText = computed(() => extractFailedLogs(props.logs, props.liveProgress))
+
+const copyTextToClipboard = async (text) => {
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+  } else {
+    const el = document.createElement('textarea')
+    el.value = text
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
+  }
+}
 
 const copyOutput = async () => {
   const displayLogs = filterSessionLogs(props.logs)
@@ -85,22 +189,27 @@ const copyOutput = async () => {
   const rawText = displayLogs.join('')
   const cleanText = stripAnsi(rawText)
   try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(cleanText)
-    } else {
-      const el = document.createElement('textarea')
-      el.value = cleanText
-      document.body.appendChild(el)
-      el.select()
-      document.execCommand('copy')
-      document.body.removeChild(el)
-    }
+    await copyTextToClipboard(cleanText)
     copied.value = true
     setTimeout(() => {
       copied.value = false
     }, 2000)
   } catch (err) {
     console.error('Failed to copy terminal output:', err)
+  }
+}
+
+const copyFailedOutput = async () => {
+  const failedText = failedLogsText.value
+  if (!failedText) return
+  try {
+    await copyTextToClipboard(failedText)
+    copiedFailed.value = true
+    setTimeout(() => {
+      copiedFailed.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy failed terminal output:', err)
   }
 }
 
@@ -327,6 +436,18 @@ watch(currentTerminalFont, (newFontId) => {
       </div>
       <div class="terminal-actions">
         <button
+          id="btn-copy-failed-terminal"
+          class="btn-copy-terminal btn-copy-failed-terminal"
+          :class="{ active: copiedFailed }"
+          :disabled="!failedLogsText"
+          @click="copyFailedOutput"
+          title="Copy final failed test logs only"
+        >
+          <span v-if="copiedFailed">✓ Copied Failed</span>
+          <span v-else>⚠️ Copy Failed</span>
+        </button>
+        <button
+          id="btn-copy-terminal"
           class="btn-copy-terminal"
           :class="{ active: copied }"
           :disabled="!props.logs || props.logs.length === 0"

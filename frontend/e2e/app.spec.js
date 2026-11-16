@@ -1825,6 +1825,53 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('[data-testid="batch-total-count"]')).toHaveText('2')
     await expect(page.locator('[data-testid="batch-passed-count"]')).toHaveText('2')
   })
+
+  test('should enable Copy Failed button on Terminal Output header only when tests fail and copy final failed logs', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    const copyFailedBtn = page.locator('#btn-copy-failed-terminal')
+    await expect(copyFailedBtn).toBeVisible()
+    await expect(copyFailedBtn).toBeDisabled()
+
+    // 1. Run test_slow_and_classes.py normally (0 failures) -> Copy Failed button remains disabled
+    const slowFileRow = page.locator('.node-row:has-text("test_slow_and_classes.py")')
+    await slowFileRow.locator('.node-checkbox').click()
+    await page.locator('.btn-primary').click()
+    await expect(page.locator('#btn-stop-execution')).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 30000 })
+    await expect(copyFailedBtn).toBeDisabled()
+
+    // 2. Configure --runxfail in Run Options so test_intentionally_xfailed_case fails
+    await page.click('#btn-run-options')
+    const extraArgsInput = page.locator('#run-options-extra')
+    await extraArgsInput.fill('--runxfail')
+    await page.click('#run-options-apply')
+
+    try {
+      await page.locator('.btn-primary').click()
+      await expect(page.locator('#btn-stop-execution')).toBeVisible({ timeout: 5000 })
+      await expect(page.locator('#btn-stop-execution')).toHaveCount(0, { timeout: 30000 })
+
+      // Copy Failed button is now enabled
+      await expect(copyFailedBtn).toBeEnabled()
+      await copyFailedBtn.click()
+      await expect(copyFailedBtn).toContainText('✓ Copied Failed')
+
+      const clipboardText = await page.evaluate(() => navigator.clipboard.readText())
+      expect(clipboardText).toContain('FAILURES')
+      expect(clipboardText).toContain('test_intentionally_xfailed_case')
+      expect(clipboardText).toContain('Expected failure occurred as designed')
+      expect(clipboardText).toContain('1 failed')
+      // Should not include passing test lines before the FAILURES section
+      expect(clipboardText).not.toContain('PASSED tests/unit/test_slow_and_classes.py::TestClassWithSlowSetup::test_query_fast_one')
+    } finally {
+      // Restore Run Options extra_args
+      await page.click('#btn-run-options')
+      await page.locator('#run-options-extra').fill('')
+      await page.click('#run-options-apply')
+    }
+  })
 })
 
 
