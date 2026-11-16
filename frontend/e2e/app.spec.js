@@ -1726,6 +1726,105 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('.node-row:has-text("calculator.feature")')).toHaveClass(/row-has-passed/)
     await expect(page.locator('.node-row:has-text("workload_analytics.feature")')).toHaveClass(/row-has-passed/)
   })
+
+  test('should switch between Tests and API Deck, save env/auth in DB, auto-save requests, quick-search large responses, run parallel stress tests, and drag-group APIs for batch runs', async ({ page }) => {
+    await page.waitForSelector('.tree-container', { timeout: 60000 })
+
+    // 1. Switch from Tests UI to API Deck UI and back using the mode switch buttons
+    await page.click('#btn-mode-api')
+    await expect(page.locator('#btn-new-api')).toBeVisible()
+    await page.click('#btn-mode-switch')
+    await expect(page.locator('.tree-container')).toBeVisible()
+    await page.click('#btn-mode-switch')
+    await expect(page.locator('#btn-new-api')).toBeVisible()
+
+    // Clean any pre-existing API nodes in this repo first
+    const existingDeletes = page.locator('.btn-delete-node')
+    while ((await existingDeletes.count()) > 0) {
+      await existingDeletes.first().click({ force: true })
+      await page.waitForTimeout(100)
+    }
+
+    // 2. Configure Address & Auth and save to SQLite DB
+    await page.click('#btn-api-env-config')
+    await page.fill('#api-env-name-input', 'Local E2E Env')
+    await page.fill('#api-env-addr-input', 'http://127.0.0.1:9388')
+    await page.selectOption('#api-env-auth-type', 'bearer')
+    await page.fill('#api-env-bearer-token', 'e2e-secret-jwt')
+    await page.click('#btn-save-api-env')
+    await expect(page.locator('[data-testid="env-saved-badge"]')).toBeVisible()
+    await page.click('.btn-modal-close')
+    await expect(page.locator('#api-env-select')).toContainText('Local E2E Env')
+
+    // 3. Create API #1 (POST Echo with query params and JSON body) -> auto-saved & executed
+    await page.click('#btn-new-api')
+    await page.fill('#api-req-name', 'Echo POST API')
+    await page.selectOption('#api-method-select', 'POST')
+    await page.fill('#api-path-input', '/api/api-deck/mock/echo')
+    await page.fill('.param-key-input', 'env')
+    await page.fill('.param-val-input', 'test')
+    await page.click('[data-req-tab="body"]')
+    await page.fill('#api-body-textarea', '{"hello":"pytestdeck"}')
+
+    // Wait for auto-save to complete
+    await page.waitForTimeout(400)
+    await expect(page.locator('[data-testid="api-autosave-badge"]')).toContainText('Auto-saved')
+
+    await page.click('#btn-send-api')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveText('200')
+    await expect(page.locator('#api-response-scroll')).toContainText('pytestdeck')
+    await expect(page.locator('#api-response-scroll')).toContainText('Bearer e2e-secret-jwt')
+
+    // 4. Create API #2 (Large Response) and test scrollable quick search
+    await page.click('#btn-new-api')
+    await page.fill('#api-req-name', 'Huge Payload API')
+    await page.selectOption('#api-method-select', 'GET')
+    await page.fill('#api-path-input', '/api/api-deck/mock/large')
+    await page.click('[data-req-tab="params"]')
+    await page.fill('.param-key-input', 'keyword')
+    await page.fill('.param-val-input', 'SUPER_NEEDLE_XYZ')
+    await page.waitForTimeout(400)
+
+    await page.click('#btn-send-api')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveText('200')
+
+    // Quick search inside the large response
+    await page.fill('#response-search-input', 'SUPER_NEEDLE_XYZ')
+    await expect(page.locator('[data-testid="response-match-count"]')).toContainText('/ 13')
+    await page.click('#chk-filter-matches')
+    await expect(page.locator('.resp-line').first()).toContainText('SUPER_NEEDLE_XYZ')
+
+    // 5. Run Parallel Stress Test and verify Avg, Min, Max, P95 time metrics
+    await page.click('#tab-api-stress')
+    await page.fill('#stress-total-input', '15')
+    await page.fill('#stress-concurrency-input', '5')
+    await page.click('#btn-run-stress-test')
+
+    await expect(page.locator('[data-testid="stress-results-panel"]')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('[data-testid="stress-avg-ms"]')).toContainText('ms')
+    await expect(page.locator('[data-testid="stress-min-ms"]')).toContainText('ms')
+    await expect(page.locator('[data-testid="stress-max-ms"]')).toContainText('ms')
+    await expect(page.locator('[data-testid="stress-p95-ms"]')).toContainText('ms')
+    await expect(page.locator('[data-testid="stress-success-fail"]')).toContainText('15')
+
+    // 6. Drag-and-drop grouping & Batch execution of selected group
+    const echoNodeRow = page.locator('.api-node-row:has-text("Echo POST API")')
+    const hugeNodeRow = page.locator('.api-node-row:has-text("Huge Payload API")')
+    await hugeNodeRow.dragTo(echoNodeRow)
+
+    // Verify a group node was created containing both APIs
+    const groupRow = page.locator('.api-node-row:has(.method-badge.grp)')
+    await expect(groupRow).toBeVisible()
+
+    // Select the group checkbox -> selects both child APIs (Run Selected (2))
+    await groupRow.locator('.api-node-checkbox').click()
+    await expect(page.locator('#btn-run-selected-apis')).toContainText('Run Selected (2)')
+
+    await page.click('#btn-run-selected-apis')
+    await expect(page.locator('[data-testid="api-batch-summary"]')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('[data-testid="batch-total-count"]')).toHaveText('2')
+    await expect(page.locator('[data-testid="batch-passed-count"]')).toHaveText('2')
+  })
 })
 
 

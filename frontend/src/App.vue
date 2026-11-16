@@ -6,8 +6,15 @@ import MetricsSummary from './components/MetricsSummary.vue'
 import RunHistory from './components/RunHistory.vue'
 import EnvLogModal from './components/EnvLogModal.vue'
 import TestDetailView from './components/TestDetailView.vue'
+import ApiExplorer from './components/ApiExplorer.vue'
+import ApiRequestView from './components/ApiRequestView.vue'
+import ApiStressTestView from './components/ApiStressTestView.vue'
+import ApiBatchSummaryView from './components/ApiBatchSummaryView.vue'
+import ApiEnvModal from './components/ApiEnvModal.vue'
 import { useTestRunner } from './composables/useTestRunner'
+import { useApiDeck } from './composables/useApiDeck'
 import { useTooltip } from './composables/useTooltip'
+import { useSidebarResize } from './composables/useSidebarResize'
 
 const {
   targetPath,
@@ -52,8 +59,49 @@ const {
   methodOutputs
 } = useTestRunner()
 
+const {
+  activeMode,
+  apiActiveTab,
+  environments,
+  activeEnv,
+  showEnvModal,
+  apiNodes,
+  apiTree,
+  selectedApiIds,
+  selectedApiCount,
+  activeRequestId,
+  activeRequest,
+  saveStatus,
+  isSending,
+  currentResponse,
+  isRunningBatch,
+  batchSummary,
+  isRunningStress,
+  stressConfig,
+  stressResult,
+  createNewRequest,
+  createNewGroup,
+  selectRequestForEdit,
+  deleteApiNode,
+  moveApiNode,
+  toggleSelectApiNode,
+  clearApiSelections,
+  saveEnvironment,
+  activateEnvironment,
+  deleteEnvironment,
+  sendCurrentRequest,
+  runSelectedApis,
+  runStressTest
+} = useApiDeck(targetPath)
 
-import { useSidebarResize } from './composables/useSidebarResize'
+const onInspectBatchResult = (item) => {
+  const node = apiNodes.value.find((n) => n.id === item.node_id)
+  if (node) {
+    selectRequestForEdit(node)
+  }
+  currentResponse.value = item
+  apiActiveTab.value = 'request'
+}
 
 const { sidebarWidth, isResizing, startResizing } = useSidebarResize(480)
 const { activeTooltip } = useTooltip()
@@ -61,25 +109,30 @@ const { activeTooltip } = useTooltip()
 
 <template>
   <div class="deck-app">
-    <!-- Left-hand Sidebar: Appbar Controls + Test Explorer -->
+    <!-- Left-hand Sidebar: Appbar Controls + Test Explorer or API Explorer -->
     <aside class="deck-sidebar" :style="{ width: sidebarWidth + 'px' }">
       <Header
         v-model:targetPath="targetPath"
         v-model:activeSuite="activeSuite"
+        v-model:activeMode="activeMode"
         :availableSuites="availableSuites"
         :envStatus="envStatus"
+        :apiEnvironments="environments"
+        :activeApiEnv="activeEnv"
         @discover="discoverTests"
         @open-env-logs="showEnvLogModal = true; fetchEnvLogs()"
+        @open-api-env-modal="showEnvModal = true"
+        @select-api-env="activateEnvironment"
       />
 
       <TestExplorer
+        v-if="activeMode === 'tests'"
         :activeSuite="activeSuite"
         :isDiscovering="isDiscovering"
         :isRunning="isRunning"
         :selectedCount="selectedCount"
         :failedCount="failedCount"
         v-model:markerFilter="markerFilter"
-
         v-model:extraArgs="extraArgs"
         :testTree="testTree"
         :selectedNodes="selectedNodes"
@@ -94,6 +147,22 @@ const { activeTooltip } = useTooltip()
         @prune-branches="pruneMergedAndDeletedBranches"
       />
 
+      <ApiExplorer
+        v-else
+        :apiTree="apiTree"
+        :selectedIds="selectedApiIds"
+        :selectedCount="selectedApiCount"
+        :activeRequestId="activeRequestId"
+        :isRunningBatch="isRunningBatch"
+        @new-request="createNewRequest(); apiActiveTab = 'request'"
+        @new-group="createNewGroup()"
+        @select-request="selectRequestForEdit($event); apiActiveTab = 'request'"
+        @toggle-check="toggleSelectApiNode"
+        @clear-selection="clearApiSelections"
+        @delete-node="deleteApiNode"
+        @drop-node="moveApiNode"
+        @run-selected="runSelectedApis"
+      />
 
       <!-- Drag handle to adjust sidebar width -->
       <div 
@@ -106,7 +175,9 @@ const { activeTooltip } = useTooltip()
 
     <!-- Right Main: Full-Height Tabbed Views -->
     <main class="deck-main">
-      <div class="tabs-header">
+      <!-- TEST DECK MODE -->
+      <template v-if="activeMode === 'tests'">
+        <div class="tabs-header">
           <button 
             class="tab-btn" 
             :class="{ active: activeTab === 'live' }"
@@ -128,7 +199,7 @@ const { activeTooltip } = useTooltip()
             :class="{ active: activeTab === 'summary' }"
             @click="activeTab = 'summary'"
           >
-            Metrics & Summary
+            Metrics &amp; Summary
           </button>
           <button 
             class="tab-btn" 
@@ -165,7 +236,6 @@ const { activeTooltip } = useTooltip()
             />
           </div>
 
-
           <!-- Metrics & Summary Tab -->
           <div v-show="activeTab === 'summary'" class="tab-pane summary-pane">
             <MetricsSummary :summary="summary" :exitCode="exitCode" />
@@ -188,8 +258,71 @@ const { activeTooltip } = useTooltip()
             />
           </div>
         </div>
+      </template>
 
-      </main>
+      <!-- API DECK MODE -->
+      <template v-else>
+        <div class="tabs-header">
+          <button
+            id="tab-api-request"
+            class="tab-btn"
+            :class="{ active: apiActiveTab === 'request' }"
+            @click="apiActiveTab = 'request'"
+          >
+            Request &amp; Response
+          </button>
+          <button
+            id="tab-api-stress"
+            class="tab-btn"
+            :class="{ active: apiActiveTab === 'stress' }"
+            @click="apiActiveTab = 'stress'"
+          >
+            Parallel / Stress Test
+          </button>
+          <button
+            id="tab-api-batch"
+            class="tab-btn"
+            :class="{ active: apiActiveTab === 'batch' }"
+            @click="apiActiveTab = 'batch'"
+          >
+            Batch Run Results
+          </button>
+        </div>
+
+        <div class="tab-content">
+          <div v-show="apiActiveTab === 'request'" class="tab-pane">
+            <ApiRequestView
+              v-model:request="activeRequest"
+              :activeEnv="activeEnv"
+              :saveStatus="saveStatus"
+              :isSending="isSending"
+              :response="currentResponse"
+              @send="sendCurrentRequest"
+              @open-stress="apiActiveTab = 'stress'"
+            />
+          </div>
+
+          <div v-show="apiActiveTab === 'stress'" class="tab-pane">
+            <ApiStressTestView
+              v-model:stressConfig="stressConfig"
+              :request="activeRequest"
+              :activeEnv="activeEnv"
+              :stressResult="stressResult"
+              :isRunningStress="isRunningStress"
+              @run-stress="runStressTest"
+            />
+          </div>
+
+          <div v-show="apiActiveTab === 'batch'" class="tab-pane">
+            <ApiBatchSummaryView
+              :batchSummary="batchSummary"
+              :isRunningBatch="isRunningBatch"
+              @inspect-result="onInspectBatchResult"
+            />
+          </div>
+        </div>
+      </template>
+    </main>
 
     <!-- Floating Glass Tooltip -->
     <Teleport to="body">
@@ -217,6 +350,17 @@ const { activeTooltip } = useTooltip()
       :logs="envLogs" 
       @close="showEnvLogModal = false" 
       @refresh="fetchEnvLogs" 
+    />
+
+    <!-- API Environment & Auth Settings Modal -->
+    <ApiEnvModal
+      :show="showEnvModal"
+      :environments="environments"
+      :activeEnv="activeEnv"
+      @close="showEnvModal = false"
+      @save="saveEnvironment"
+      @activate="activateEnvironment"
+      @delete="deleteEnvironment"
     />
   </div>
 </template>
