@@ -346,5 +346,34 @@ def test_behave_passing_scenario_with_red_logs_and_failed_words_remains_passed()
     assert single_res[node_key]["outcome"] == "passed"
 
 
+def test_status_events_and_stdout_with_mixed_suite_prefixes_do_not_duplicate_nodes():
+    """Verifies Issue #63: mixing rootdir-relative status events and suite-prefixed stdout lines produces a single canonical entry per test."""
+    collector = MethodOutputCollector(requested_nodes=["tests/integration"])
+
+    # Status plugin emits rootdir-relative node_id ("running") first
+    collector.record_status_event("test_api_endpoints.py::test_add", "running")
+    # Stdout emits suite-prefixed node_id
+    collector.process_line("tests/integration/test_api_endpoints.py::test_add PASSED [ 50%]\n")
+    # Status plugin emits rootdir-relative final outcome + duration
+    collector.record_status_event("test_api_endpoints.py::test_add", "passed", 0.0234)
+
+    # Xdist worker line with suite prefix followed by rootdir-relative status event
+    collector.record_status_event("test_api_endpoints.py::test_subtract", "running")
+    collector.process_line("[gw0] PASSED tests/integration/test_api_endpoints.py::test_subtract\n")
+    collector.record_status_event("test_api_endpoints.py::test_subtract", "passed", 0.0156)
+
+    res = collector.get_results()
+    assert len(res) == 2
+    assert "tests/integration/test_api_endpoints.py::test_add" in res
+    assert "tests/integration/test_api_endpoints.py::test_subtract" in res
+    assert "test_api_endpoints.py::test_add" not in res
+    assert "test_api_endpoints.py::test_subtract" not in res
+    assert res["tests/integration/test_api_endpoints.py::test_add"]["outcome"] == "passed"
+    assert res["tests/integration/test_api_endpoints.py::test_add"]["duration"] == 0.0234
+    assert res["tests/integration/test_api_endpoints.py::test_subtract"]["outcome"] == "passed"
+    assert res["tests/integration/test_api_endpoints.py::test_subtract"]["duration"] == 0.0156
+
+
+
 
 

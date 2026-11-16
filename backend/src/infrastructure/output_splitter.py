@@ -105,6 +105,40 @@ class MethodOutputCollector:
                 "timestamp": datetime.datetime.now(datetime.UTC).strftime("%H:%M:%S UTC"),
             }
 
+    def _resolve_or_create_node(self, node_id: str) -> str:
+        """Resolves node_id against existing entries at path boundary, re-keying to the most path-qualified ID."""
+        candidates = [
+            k
+            for k in self.method_outputs
+            if k == node_id or _is_same_test_node_at_path_boundary(k, node_id)
+        ]
+        if not candidates:
+            self._ensure_node(node_id)
+            return node_id
+
+        all_ids = [node_id, *candidates]
+        canonical_key = max(all_ids, key=len)
+        self._ensure_node(canonical_key)
+        target_entry = self.method_outputs[canonical_key]
+
+        for alias_key in candidates:
+            if alias_key == canonical_key:
+                continue
+            alias_entry = self.method_outputs.pop(alias_key, None)
+            if not alias_entry:
+                continue
+            if alias_entry.get("lines"):
+                target_entry["lines"] = alias_entry["lines"] + target_entry["lines"]
+            if target_entry["outcome"] in ("unknown", "running") and alias_entry.get("outcome") not in (None, "unknown"):
+                target_entry["outcome"] = alias_entry["outcome"]
+            if target_entry["duration"] is None and alias_entry.get("duration") is not None:
+                target_entry["duration"] = alias_entry["duration"]
+            if self.current_node == alias_key:
+                self.current_node = canonical_key
+
+        return canonical_key
+
+
     def _accumulate_behave_step_duration(self, node_id: str, clean_line: str) -> None:
         if ".feature::" not in node_id or node_id not in self.method_outputs:
             return
@@ -168,9 +202,9 @@ class MethodOutputCollector:
             title = re.sub(r"\s+--\s+@\d+\.\d+.*$", "", raw_title).strip()
             feat_file = sc_match.group(2) or self.current_feature_file or ""
             node_id = f"{feat_file}::{title}" if feat_file else title
-            self.current_node = node_id
-            self._ensure_node(node_id)
-            self.method_outputs[node_id]["lines"].append(raw_line)
+            canonical_id = self._resolve_or_create_node(node_id)
+            self.current_node = canonical_id
+            self.method_outputs[canonical_id]["lines"].append(raw_line)
             return
 
         # Check for pytest-xdist worker result line (e.g. "[gw0] PASSED path/to/test.py::test_func")
@@ -179,14 +213,14 @@ class MethodOutputCollector:
             status_token, rest_text = xdist_match.group(1), xdist_match.group(2)
             node_id = _extract_pytest_node_id(rest_text)
             if node_id:
-                self._ensure_node(node_id)
-                self.method_outputs[node_id]["lines"].append(raw_line)
+                canonical_id = self._resolve_or_create_node(node_id)
+                self.method_outputs[canonical_id]["lines"].append(raw_line)
                 if status_token in ("PASSED", "XPASS"):
-                    self.method_outputs[node_id]["outcome"] = "passed"
+                    self.method_outputs[canonical_id]["outcome"] = "passed"
                 elif status_token in ("FAILED", "ERROR"):
-                    self.method_outputs[node_id]["outcome"] = "failed"
+                    self.method_outputs[canonical_id]["outcome"] = "failed"
                 elif status_token in ("SKIPPED", "XFAIL"):
-                    self.method_outputs[node_id]["outcome"] = "skipped"
+                    self.method_outputs[canonical_id]["outcome"] = "skipped"
                 return
 
 
@@ -194,16 +228,16 @@ class MethodOutputCollector:
         if not stripped.startswith(("=", "-", "rootdir:", "cachedir:", "plugins:")) and not clean.startswith("FAILURES"):
             node_id = _extract_pytest_node_id(clean)
             if node_id:
-                self.current_node = node_id
-                self._ensure_node(node_id)
-                self.method_outputs[node_id]["lines"].append(raw_line)
+                canonical_id = self._resolve_or_create_node(node_id)
+                self.current_node = canonical_id
+                self.method_outputs[canonical_id]["lines"].append(raw_line)
                 after_node = stripped[len(node_id) :]
                 if re.search(r"(?:^|\s)(?:PASSED|XPASS)(?:\s+\[\s*\d+%\]|\b)", after_node):
-                    self.method_outputs[node_id]["outcome"] = "passed"
+                    self.method_outputs[canonical_id]["outcome"] = "passed"
                 elif re.search(r"(?:^|\s)(?:FAILED|ERROR)(?:\s+\[\s*\d+%\]|\b)", after_node):
-                    self.method_outputs[node_id]["outcome"] = "failed"
+                    self.method_outputs[canonical_id]["outcome"] = "failed"
                 elif re.search(r"(?:^|\s)(?:SKIPPED|XFAIL)(?:\s+\[\s*\d+%\]|\b)", after_node):
-                    self.method_outputs[node_id]["outcome"] = "skipped"
+                    self.method_outputs[canonical_id]["outcome"] = "skipped"
                 return
 
         # Check for Pytest FAILURES section demarcation
@@ -283,24 +317,7 @@ class MethodOutputCollector:
         """Records a structured lifecycle event from the pytest status plugin."""
         if not node_id or not outcome:
             return
-        matched_key = node_id if node_id in self.method_outputs else None
-        if not matched_key:
-            candidates = [
-                k
-                for k in self.method_outputs
-                if _is_same_test_node_at_path_boundary(k, node_id)
-            ]
-            if candidates:
-                candidates.sort(key=lambda k: abs(len(k) - len(node_id)))
-                matched_key = candidates[0]
-                if len(node_id) > len(matched_key):
-                    entry = self.method_outputs.pop(matched_key)
-                    entry["node_id"] = node_id
-                    self.method_outputs[node_id] = entry
-                    matched_key = node_id
-        if not matched_key:
-            self._ensure_node(node_id)
-            matched_key = node_id
+        matched_key = self._resolve_or_create_node(node_id)
 
         if outcome != "running":
             self.method_outputs[matched_key]["outcome"] = outcome
