@@ -118,3 +118,27 @@ def test_get_prunable_git_branches(tmp_path):
     prunable_on_main = get_prunable_git_branches(git_repo, stored_branches)
     assert set(prunable_on_main) == {"feat/merged", "feat/deleted"}
 
+
+def test_get_target_storage_dir_disambiguates_same_leaf_repo_names(tmp_path, monkeypatch):
+    """Verifies that two distinct target repos with the same directory name do not collide in .pytestdeck."""
+    mock_app_root = tmp_path / "pytestdeck_app"
+    monkeypatch.setenv("PYTESTDECK_ROOT", str(mock_app_root))
+
+    repo_a = tmp_path / "org_a" / "billing_service"
+    repo_b = tmp_path / "org_b" / "billing_service"
+    repo_a.mkdir(parents=True)
+    repo_b.mkdir(parents=True)
+
+    dir_a = get_target_storage_dir(repo_a)
+    dir_b = get_target_storage_dir(repo_b)
+
+    assert dir_a != dir_b
+    assert dir_a == mock_app_root / ".pytestdeck" / "billing_service"
+    assert dir_b.parent == mock_app_root / ".pytestdeck"
+    assert dir_b.name.startswith("billing_service-")
+
+    # Subsequent calls remain stable
+    assert get_target_storage_dir(repo_a) == dir_a
+    assert get_target_storage_dir(repo_b) == dir_b
+
+

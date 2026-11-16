@@ -93,3 +93,12 @@ async def test_pytest_discovery_service_timeout_terminates_subprocess(tmp_path):
     with pytest.raises(ValueError, match="timed out"):
         await service.collect_raw(str(tmp_path), suite_rel_path="tests/unit")
 
+
+@pytest.mark.anyio
+async def test_pytest_discovery_service_rejects_unsafe_suite_rel_path(tmp_path):
+    """Verifies that collect_raw rejects path traversal in suite_rel_path."""
+    service = PytestDiscoveryService()
+    with pytest.raises(ValueError, match="Unsafe suite_rel_path"):
+        await service.collect_raw(str(tmp_path), suite_rel_path="../../etc")
+
+

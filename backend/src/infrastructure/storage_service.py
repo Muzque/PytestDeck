@@ -1,3 +1,4 @@
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -52,19 +53,49 @@ def get_target_repo_name(target_path: str | Path | None = None) -> str:
     return "target_repo"
 
 
+def _canonical_target_identity(target_path: str | Path | None) -> str:
+    """Returns a stable canonical path string for disambiguating storage directories."""
+    raw = str(target_path).strip() if target_path else os.getenv("TARGET_REPO", "").strip()
+    if not raw or raw in (".", "/target"):
+        return ""
+    try:
+        p = Path(raw).expanduser()
+        if p.is_absolute():
+            return str(p.resolve())
+        resolved = resolve_target_path(raw)
+        return str(resolved)
+    except Exception:
+        return raw
+
+
 def get_target_storage_dir(target_path: str | Path | None = None) -> Path:
     """Returns the dedicated storage directory inside PytestDeck/.pytestdeck/<target_repo>/.
 
     Ensures the target repository is completely untouched, storing all runtime databases
-    and reports in PytestDeck's own directory structure.
+    and reports in PytestDeck's own directory structure. Disambiguates with a short path
+    hash if another target repository at a different path already claimed the same leaf name.
     """
     root = get_pytestdeck_root()
     repo_name = get_target_repo_name(target_path)
+    canonical_id = _canonical_target_identity(target_path)
     storage_root = root / ".pytestdeck"
     target_storage = storage_root / repo_name
 
     try:
+        if canonical_id and target_storage.exists():
+            marker_file = target_storage / ".target_path"
+            if marker_file.exists():
+                recorded_id = marker_file.read_text(encoding="utf-8").strip()
+                if recorded_id and recorded_id != canonical_id:
+                    short_hash = hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:8]
+                    target_storage = storage_root / f"{repo_name}-{short_hash}"
+
         target_storage.mkdir(parents=True, exist_ok=True)
+        if canonical_id:
+            marker_file = target_storage / ".target_path"
+            if not marker_file.exists():
+                marker_file.write_text(canonical_id + "\n", encoding="utf-8")
+
         gitignore = storage_root / ".gitignore"
         if not gitignore.exists():
             gitignore.write_text("*\n", encoding="utf-8")

@@ -61,9 +61,11 @@ class PytestDiscoveryService:
         Raises:
             ValueError: If target_path does not exist or is not a directory.
         """
-        from domain.services import resolve_target_path
+        from domain.services import is_safe_subpath, resolve_target_path
 
         target_dir = resolve_target_path(target_path)
+        if suite_rel_path and not is_safe_subpath(target_dir, suite_rel_path):
+            raise ValueError(f"Unsafe suite_rel_path traversal detected: {suite_rel_path}")
         ensure_target_env_ready()
 
         # Handle Behave feature files discovery if suite is acceptance
