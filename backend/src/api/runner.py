@@ -12,11 +12,14 @@ from infrastructure.runner_service import SubprocessRunnerService
 
 router = APIRouter(prefix="/ws", tags=["runner"])
 
+_ACTIVE_RUNNERS: dict[str, SubprocessRunnerService] = {}
+
 
 @router.websocket("/run")
 async def websocket_run(websocket: WebSocket):
     await websocket.accept()
     runner: SubprocessRunnerService | None = None
+    target_dir_str: str = ""
 
     try:
         msg_raw = await websocket.receive_text()
@@ -28,6 +31,7 @@ async def websocket_run(websocket: WebSocket):
             nodes = msg.get("nodes", [])
             marker = msg.get("marker", None)
             extra_args = msg.get("extra_args", [])
+            if_busy = msg.get("if_busy", "preempt")
 
             from domain.services import resolve_target_path
 
@@ -42,7 +46,31 @@ async def websocket_run(websocket: WebSocket):
                 return
 
             target_dir_str = str(resolved_target)
+            existing_runner = _ACTIVE_RUNNERS.get(target_dir_str)
+
+            if existing_runner is not None:
+                is_still_running = (
+                    existing_runner.proc is None
+                    or existing_runner.proc.returncode is None
+                )
+                if is_still_running:
+                    if if_busy == "reject":
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": f"A test run is already in progress for {target_dir_str}",
+                            }
+                        )
+                        await websocket.close()
+                        return
+                    await existing_runner.abort()
+                    for _ in range(25):
+                        if _ACTIVE_RUNNERS.get(target_dir_str) is not existing_runner:
+                            break
+                        await asyncio.sleep(0.02)
+
             runner = SubprocessRunnerService(target_dir_str)
+            _ACTIVE_RUNNERS[target_dir_str] = runner
 
             prune_stale_reports(target_dir_str)
             report_file = create_report_path(target_dir_str, prefix="run")
@@ -95,6 +123,8 @@ async def websocket_run(websocket: WebSocket):
                         raise exc
             finally:
                 await runner.abort()
+                if _ACTIVE_RUNNERS.get(target_dir_str) is runner:
+                    _ACTIVE_RUNNERS.pop(target_dir_str, None)
                 cleanup_report_file(report_json_path)
         elif action == "STOP":
             if runner:

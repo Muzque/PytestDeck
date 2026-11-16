@@ -230,5 +230,74 @@ def test_ws_run_disconnect_aborts_silent_subprocess_immediately(tmp_path):
     assert elapsed < 1.5
 
 
+def test_ws_run_concurrent_run_on_same_target_aborts_previous_and_serializes(tmp_path):
+    """Verifies that starting a new run on the same target aborts the previous active run and prevents overlap."""
+    import time
+
+    pid_file = tmp_path / "concurrent_pid1.txt"
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    (test_dir / "test_slow_one.py").write_text(
+        "import os, pathlib, time\n"
+        "def test_hang_first():\n"
+        f"    pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+        "    time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    (test_dir / "test_fast_two.py").write_text(
+        "def test_quick_second():\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+
+    with client.websocket_connect("/ws/run") as ws1:
+        ws1.send_json({
+            "action": "START",
+            "target_path": str(tmp_path),
+            "nodes": ["tests/test_slow_one.py"],
+        })
+        deadline = time.monotonic() + 10.0
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert pid_file.exists(), "First run did not start in time"
+        first_pid = int(pid_file.read_text().strip())
+        assert _is_pid_alive(first_pid)
+
+        # Reject mode when busy
+        with client.websocket_connect("/ws/run") as ws_reject:
+            ws_reject.send_json({
+                "action": "START",
+                "target_path": str(tmp_path),
+                "nodes": ["tests/test_fast_two.py"],
+                "if_busy": "reject",
+            })
+            err_msg = ws_reject.receive_json()
+            assert err_msg.get("type") == "error"
+            assert "already in progress" in err_msg.get("message", "")
+
+        assert _is_pid_alive(first_pid)
+
+        # Default preempt mode aborts the first run and executes the second cleanly
+        with client.websocket_connect("/ws/run") as ws2:
+            ws2.send_json({
+                "action": "START",
+                "target_path": str(tmp_path),
+                "nodes": ["tests/test_fast_two.py"],
+            })
+            ws2_messages = []
+            while True:
+                msg = ws2.receive_json()
+                ws2_messages.append(msg)
+                if msg.get("type") == "finished":
+                    break
+
+        assert not _is_pid_alive(first_pid)
+        finished = next(m for m in ws2_messages if m.get("type") == "finished")
+        assert finished["exit_code"] == 0
+        ws1.close()
+
+
+
+
 
 

@@ -315,8 +315,8 @@ class SubprocessRunnerService:
                             await asyncio.wait_for(res, timeout=0.5)
                         else:
                             await asyncio.sleep(0.5)
-                    except TimeoutError:
-                        pass
+                    except (TimeoutError, RuntimeError):
+                        await asyncio.sleep(0.2)
                 else:
                     await asyncio.sleep(0.5)
 
@@ -332,7 +332,7 @@ class SubprocessRunnerService:
                             res2 = wait_fn()
                             if asyncio.iscoroutine(res2):
                                 await asyncio.wait_for(res2, timeout=0.5)
-                        except TimeoutError:
-                            pass
+                        except (TimeoutError, RuntimeError):
+                            await asyncio.sleep(0.1)
             except (ProcessLookupError, OSError):
                 pass
