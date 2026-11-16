@@ -69,21 +69,29 @@ description: >-
 
 ## 4. 架構分層與實作規範 (Architecture & Boundaries)
 
-嚴格遵守專案的領域驅動設計（DDD）分層與前後端職責劃分：
+嚴格遵守專案的 **UI 子目錄隔離規範 (`test_deck` vs `api_deck`)**、領域驅動設計（DDD）分層與 **後端 1-to-1 單元測試對應原則**（詳見 `ui-module-isolation-and-test-mapping` 技能）：
+
+### 雙 UI 模組物理隔離（Subfolder Isolation）
+- **禁止跨 UI 修改與交叉引用**：
+  - Test Runner UI 的後端與前端程式碼完全封裝於 `backend/src/test_deck/` 與 `frontend/src/test_deck/`。
+  - API Deck UI 的後端與前端程式碼完全封裝於 `backend/src/api_deck/` 與 `frontend/src/api_deck/`。
+  - 兩個子目錄之間**絕對不可互相 import 或共用 domain/DB 檔案**，確保不同開發者或 Agent 同時開發兩個 UI 時不會觸碰彼此的檔案。
+- **後端 1-to-1 單元測試映射（Strict 1-to-1 Unit Test Mapping）**：
+  - `backend/src/<rel_dir>/<name>.py` 底下每一個非 `__init__.py` 的原始碼檔案，都必須在 `backend/tests/unit/<rel_dir>/test_<name>.py` 具備完全一對一的單元測試檔案。
 
 ### 後端（Backend - Clean Architecture / DDD）
-- **`backend/src/domain/`**：
-  - 核心領域模型、純粹邏輯與設定實體（例如 `BehaveConfig`、`DirectoryNode`、`TestOutcome`）。
+- **`backend/src/<ui_deck>/domain/`**：
+  - 核心領域模型、純粹邏輯與設定實體（例如 `BehaveConfig`、`DirectoryNode`、`TestOutcome`、`ApiEnvironment`）。
   - **禁忌**：不可依賴 FastAPI、Uvicorn、Subprocess I/O 或任何外部框架。
-- **`backend/src/application/`**：
+- **`backend/src/<ui_deck>/application/`**：
   - 應用程式 Use Cases（例如 `DiscoverTestsUseCase`）。負責編排領域物件。
-- **`backend/src/infrastructure/`**：
-  - 與作業系統、子進程、Pytest/Behave CLI 執行串流、檔案系統互動（例如 `runner_service.py`、`output_splitter.py`）。
-- **`backend/src/api/`**：
-  - FastAPI Route Handler 與 WebSocket 連線管理（例如 `/ws/run`、`/api/discover`）。
+- **`backend/src/<ui_deck>/infrastructure/`**：
+  - 與作業系統、子進程、Pytest/Behave CLI 執行串流、HTTP 請求或 SQLite 互動（例如 `runner_service.py`、`output_splitter.py`、`api_runner_service.py`）。
+- **`backend/src/<ui_deck>/api/`**：
+  - FastAPI Route Handler 與 WebSocket 連線管理（例如 `/ws/run`、`/api/discover`、`/api/api-deck/*`）。
 
 ### 前端（Frontend - Vue 3 + xterm.js）
-- **`frontend/src/composables/`**：
+- **`frontend/src/<ui_deck>/composables/`**：
   - 集中管理狀態與 WebSocket 事件（例如 `useTestRunner.js`、`useTheme.js`、`useTooltip.js`、`useSidebarResize.js`）。
   - 狀態變更應具備可預測性，避免在多個組件中直接 mutate 全域狀態。
   - **全路徑與選取矩陣檢查 (Entry-Point & Selection Matrix)**：
