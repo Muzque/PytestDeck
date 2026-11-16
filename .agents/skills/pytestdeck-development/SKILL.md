@@ -133,11 +133,14 @@ description: >-
    make build-frontend
    ```
    - **關鍵原因**：本機運行的 PytestDeck 伺服器 (`uvicorn app:app --port 9388`) 與 Playwright E2E 測試皆直接從 `frontend/dist` 提供靜態檔案，而非 Vite HMR dev server。**只要改動任何 `frontend/src/` 檔案，在執行 Playwright E2E 測試或請使用者檢視 UI 前，必定要先執行 `make build-frontend`（或 `cd frontend && npm run build`）更新 `frontend/dist`**，否則 Playwright 與使用者的瀏覽器只會載入舊版 bundle。
-6. **端到端測試 (E2E Tests)**（凡改動涉及前端或使用者互動流程必跑）：
+6. **端到端測試與 `sample-target-repo` 實機驗證 (E2E Tests — Commit 與 Push 前強制必跑)**：
    ```bash
    make e2e-test
+   # 或針對該 Issue 的 E2E 測試案例執行驗證：
+   cd frontend && npx playwright test e2e/app.spec.js -g "<test-name>"
    ```
-   - **新增或調整 E2E 測試**：針對 Issue 的需求，必須在 `frontend/e2e/app.spec.js` 新增對應的 E2E 測試案例或調整既有案例，確保覆蓋實際使用者操作組合（例如：未勾選直接執行全部 `Run Selected (0)`、勾選子節點執行、展開/收合節點、切換不同 Suite、視窗 `focus` 事件、中途點擊 Stop 等）。
+   - **禁止僅跑單元測試就直接 Commit / Push**：凡涉及前端 UI、狀態管理 (`useTestRunner.js`)、或後端串流/解析 (`runner_service.py`、`output_splitter.py`、`pytest_status_plugin.py`、`behave_formatter.py`) 的修改，在執行 `git commit` 與 `git push` 之前，**必須先在 `sample-target-repo` 確認有對應測試情境，並透過 Playwright E2E (`frontend/e2e/app.spec.js`) 完成端到端驗證**（詳見 `e2e-precommit-verification` 技能）。
+   - **新增或調整 E2E 測試**：針對 Issue 的需求，必須在 `frontend/e2e/app.spec.js` 新增對應的 E2E 測試案例或調整既有案例，確保覆蓋實際使用者操作組合（例如：未勾選直接執行全部 `Run All Tests`、勾選子節點執行、展開/收合節點、切換不同 Suite、視窗 `focus` 事件、中途點擊 Stop 等）。
    - **注意本機伺服器狀態 (`reuseExistingServer: true`)**：`playwright.config.js` 預設重用 `9388` port 上的既有伺服器。若修改了 `backend/src/` 且本機伺服器未開啟 `--reload`，執行 E2E 前必須先重啟伺服器（如 `make stop && make dev`），確保後端載入最新程式碼。
 
 ---
