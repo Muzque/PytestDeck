@@ -221,58 +221,65 @@ watch(() => props.isRunning, (running) => {
 }, { immediate: true })
 
 
-watch(() => props.logs, (newLogs) => {
-  if (!term) return
+watch(
+  () => [props.logs, props.logs ? props.logs.length : 0],
+  ([newLogs]) => {
+    if (!term) return
 
-  // If logs array was reset/cleared
-  if (!newLogs || newLogs.length === 0) {
-    currentLogsRef = newLogs
-    hasSessionStarted = false
-    preSessionBuffer = []
-    resetAndWriteAll([])
-    return
-  }
-
-  // If logs array was replaced (e.g. starting a run or selecting history item)
-  if (newLogs !== currentLogsRef) {
-    currentLogsRef = newLogs
-    resetAndWriteAll(newLogs)
-    return
-  }
-
-  // If logs array was trimmed in place
-  if (newLogs.length < lastLogCount) {
-    resetAndWriteAll(newLogs)
-    return
-  }
-
-  // If new log lines were appended during streaming
-  if (newLogs.length > lastLogCount) {
-    const appended = newLogs.slice(lastLogCount)
-    lastLogCount = newLogs.length
-
-    for (const line of appended) {
-      if (!hasSessionStarted) {
-        const clean = stripAnsi(line)
-        if (clean.includes('= test session starts =')) {
-          hasSessionStarted = true
-          preSessionBuffer = []
-        } else if (clean.trimStart().startsWith('Feature:')) {
-          hasSessionStarted = true
-          preSessionBuffer = []
-          term.write(line)
-        } else if (!props.isRunning) {
-          term.write(line)
-        } else {
-          preSessionBuffer.push(line)
-        }
-      } else {
-        term.write(line)
-      }
+    // If logs array was reset/cleared
+    if (!newLogs || newLogs.length === 0) {
+      currentLogsRef = newLogs
+      hasSessionStarted = false
+      preSessionBuffer = []
+      resetAndWriteAll([])
+      return
     }
-    term.scrollToBottom()
+
+    // If logs array was replaced (e.g. starting a run or selecting history item)
+    if (newLogs !== currentLogsRef) {
+      currentLogsRef = newLogs
+      resetAndWriteAll(newLogs)
+      return
+    }
+
+    // If logs array was trimmed in place
+    if (newLogs.length < lastLogCount) {
+      resetAndWriteAll(newLogs)
+      return
+    }
+
+    // If new log lines were appended during streaming
+    if (newLogs.length > lastLogCount) {
+      const appended = newLogs.slice(lastLogCount)
+      lastLogCount = newLogs.length
+      let batchToWrite = ''
+
+      for (const line of appended) {
+        if (!hasSessionStarted) {
+          const clean = stripAnsi(line)
+          if (clean.includes('= test session starts =')) {
+            hasSessionStarted = true
+            preSessionBuffer = []
+          } else if (clean.trimStart().startsWith('Feature:')) {
+            hasSessionStarted = true
+            preSessionBuffer = []
+            batchToWrite += line
+          } else if (!props.isRunning) {
+            batchToWrite += line
+          } else {
+            preSessionBuffer.push(line)
+          }
+        } else {
+          batchToWrite += line
+        }
+      }
+      if (batchToWrite) {
+        term.write(batchToWrite)
+      }
+      term.scrollToBottom()
+    }
   }
-}, { deep: true })
+)
 
 
 watch(currentTerminalTheme, (newThemeId) => {

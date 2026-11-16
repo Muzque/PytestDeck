@@ -47,20 +47,11 @@ const formattedDuration = computed(() => {
   return `${num.toFixed(2)}s`
 })
 
-const formattedOutput = computed(() => {
-  if (!props.latestRun?.output) return ''
-  let text = props.latestRun.output
+const MAX_DETAIL_OUTPUT_CHARS = 262144
 
-  // Strip pre-session runner commands and "test session starts" line if substantive output follows
-  const sessionIdx = text.indexOf('test session starts')
-  if (sessionIdx !== -1) {
-    const nextLineStart = text.indexOf('\n', sessionIdx)
-    if (nextLineStart !== -1 && text.slice(nextLineStart + 1).trim().length > 0) {
-      text = text.slice(nextLineStart + 1)
-    }
-  }
-
-  let escaped = text
+const renderAnsiSegment = (segment) => {
+  if (!segment) return ''
+  const escaped = segment
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -76,6 +67,47 @@ const formattedOutput = computed(() => {
     .replace(/\x1b\[90m/g, '<span style="color: #94a3b8;">')
     .replace(/\x1b\[0m/g, '</span>')
     .replace(/\x1b\[[0-9;]*m/g, '')
+}
+
+const stripSessionPrefix = (rawText) => {
+  const sessionIdx = rawText.indexOf('test session starts')
+  if (sessionIdx !== -1) {
+    const nextLineStart = rawText.indexOf('\n', sessionIdx)
+    if (nextLineStart !== -1 && rawText.slice(nextLineStart + 1).trim().length > 0) {
+      return rawText.slice(nextLineStart + 1)
+    }
+  }
+  return rawText
+}
+
+let cachedSourceText = ''
+let cachedHtmlOutput = ''
+
+const formattedOutput = computed(() => {
+  if (!props.latestRun?.output) {
+    cachedSourceText = ''
+    cachedHtmlOutput = ''
+    return ''
+  }
+  let text = stripSessionPrefix(props.latestRun.output)
+  if (text.length > MAX_DETAIL_OUTPUT_CHARS) {
+    text = '... [output truncated for performance] ...\n' + text.slice(-MAX_DETAIL_OUTPUT_CHARS)
+  }
+
+  if (text === cachedSourceText) {
+    return cachedHtmlOutput
+  }
+
+  if (cachedSourceText && text.startsWith(cachedSourceText)) {
+    const delta = text.slice(cachedSourceText.length)
+    cachedSourceText = text
+    cachedHtmlOutput += renderAnsiSegment(delta)
+    return cachedHtmlOutput
+  }
+
+  cachedSourceText = text
+  cachedHtmlOutput = renderAnsiSegment(text)
+  return cachedHtmlOutput
 })
 
 const copyOutput = async () => {
