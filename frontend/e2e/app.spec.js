@@ -1836,14 +1836,25 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('[data-testid="stress-p95-ms"]')).toContainText('ms')
     await expect(page.locator('[data-testid="stress-success-fail"]')).toContainText('15')
 
-    // 6. Drag-and-drop grouping & Batch execution of selected group
+    // 6. Drag-and-drop sibling reorder (no auto-group) & manual Group + Batch execution
     const echoNodeRow = page.locator('.api-node-row:has-text("Echo POST API")').last()
     const hugeNodeRow = page.locator('.api-node-row:has-text("Huge Payload API")').last()
-    await hugeNodeRow.dragTo(echoNodeRow)
+    const echoBox = await echoNodeRow.boundingBox()
+    await hugeNodeRow.dragTo(echoNodeRow, {
+      targetPosition: { x: echoBox.width / 2, y: 4 }
+    })
 
-    // Verify a group node was created containing both APIs
+    // Verify no group node was auto-created and Huge Payload API is now ordered before Echo POST API
+    await expect(page.locator('.api-node-row:has(.method-badge.grp)')).toHaveCount(0)
+    const reorderedNames = await page.locator('.api-node-row .api-node-name').allInnerTexts()
+    expect(reorderedNames).toEqual(['Huge Payload API', 'Echo POST API'])
+
+    // Create a Group via + Group, drag both requests into it, and run Batch on the group
+    await page.click('#btn-new-api-group')
     const groupRow = page.locator('.api-node-row:has(.method-badge.grp)')
     await expect(groupRow).toBeVisible()
+    await page.locator('.api-node-row:has-text("Huge Payload API")').dragTo(groupRow)
+    await page.locator('.api-node-row:has-text("Echo POST API")').dragTo(groupRow)
 
     // Select the group checkbox -> selects both child APIs (Run Selected (2))
     await groupRow.locator('.api-node-checkbox').click()
