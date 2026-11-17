@@ -1824,6 +1824,45 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('[data-testid="api-batch-summary"]')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('[data-testid="batch-total-count"]')).toHaveText('2')
     await expect(page.locator('[data-testid="batch-passed-count"]')).toHaveText('2')
+
+    // 7. Create a second Environment ("Staging E2E Env") and verify collections are isolated per Environment
+    await page.click('#btn-api-env-config')
+    await page.click('#btn-new-env-profile')
+    await page.fill('#api-env-name-input', 'Staging E2E Env')
+    await page.fill('#api-env-addr-input', 'http://127.0.0.1:9388')
+    await page.click('#btn-save-api-env')
+    await expect(page.locator('[data-testid="env-saved-badge"]')).toBeVisible()
+    await page.click('.btn-modal-close')
+    await expect(page.locator('#api-env-select')).toContainText('Staging E2E Env')
+    const stagingEnvValue = await page.locator('#api-env-select').inputValue()
+
+    // Staging E2E Env starts with an empty collection (Local E2E Env nodes are not visible)
+    await expect(page.locator('.api-node-row:has-text("Echo POST API")')).toHaveCount(0)
+    await expect(page.locator('.api-node-row:has-text("Huge Payload API")')).toHaveCount(0)
+
+    // Create a request in Staging E2E Env
+    await page.click('#btn-new-api')
+    await page.fill('#api-req-name', 'Staging Only API')
+    await page.fill('#api-path-input', '/api/api-deck/mock/echo')
+    await page.waitForTimeout(350)
+    await expect(page.locator('.api-node-row:has-text("Staging Only API")')).toBeVisible()
+
+    // Switch back to Local E2E Env -> Local collection is intact and Staging Only API is not visible
+    const localEnvValue = await page.locator('#api-env-select option', { hasText: 'Local E2E Env' }).first().getAttribute('value')
+    await page.selectOption('#api-env-select', localEnvValue)
+    await expect(page.locator('.api-node-row:has(.method-badge.post):has-text("Echo POST API")')).toBeVisible()
+    await expect(page.locator('.api-node-row:has(.method-badge.get):has-text("Huge Payload API")')).toBeVisible()
+    await expect(page.locator('.api-node-row:has-text("Staging Only API")')).toHaveCount(0)
+
+    // Switch to Staging E2E Env again -> Staging Only API is preserved, then delete Staging E2E Env to restore Local
+    await page.selectOption('#api-env-select', stagingEnvValue)
+    await expect(page.locator('.api-node-row:has-text("Staging Only API")')).toBeVisible()
+    await expect(page.locator('.api-node-row:has-text("Echo POST API")')).toHaveCount(0)
+
+    await page.click('#btn-api-env-config')
+    await page.click('.api-env-modal .btn-danger')
+    await page.click('.btn-modal-close')
+    await expect(page.locator('.api-node-row:has(.method-badge.post):has-text("Echo POST API")')).toBeVisible()
   })
 
   test('should enable Copy Failed button on Terminal Output header only when tests fail and copy final failed logs', async ({ page, context }) => {
