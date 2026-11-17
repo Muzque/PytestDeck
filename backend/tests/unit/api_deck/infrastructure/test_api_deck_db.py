@@ -1,6 +1,12 @@
+import sqlite3
 from pathlib import Path
 
-from api_deck.infrastructure.api_deck_db import ApiDeckDatabase
+import pytest
+
+from api_deck.infrastructure.api_deck_db import (
+    _INITIALIZED_API_DB_INODES,
+    ApiDeckDatabase,
+)
 
 
 def test_api_environments_crud_and_active_switch(tmp_path: Path):
@@ -135,3 +141,207 @@ def test_api_nodes_upsert_group_move_and_cascade_delete(tmp_path: Path):
     deleted_count = db.delete_api_node(group_id)
     assert deleted_count >= 3
     assert db.list_api_nodes() == []
+
+
+def test_api_nodes_scoped_per_environment_and_isolated(tmp_path: Path):
+    db_file = tmp_path / "scoped.db"
+    db = ApiDeckDatabase(target_path=tmp_path, db_path=db_file)
+
+    db.save_api_environment(
+        {
+            "id": "env-a",
+            "name": "Env A",
+            "base_url": "http://127.0.0.1:8001",
+            "is_active": True,
+        }
+    )
+    db.save_api_environment(
+        {
+            "id": "env-b",
+            "name": "Env B",
+            "base_url": "http://127.0.0.1:8002",
+            "is_active": False,
+        }
+    )
+
+    grp_a = db.upsert_api_node(
+        {"id": "grp-a", "name": "Group A", "node_type": "group"}
+    )
+    req_a = db.upsert_api_node(
+        {
+            "id": "req-a",
+            "parent_id": "grp-a",
+            "name": "Request A",
+            "node_type": "request",
+            "method": "POST",
+            "path": "/a",
+            "body": '{"a": 1}',
+        }
+    )
+    assert grp_a["environment_id"] == "env-a"
+    assert req_a["environment_id"] == "env-a"
+    db.update_api_node_run_status("req-a", 200, 10.0, "passed", {"size_bytes": 10})
+
+    # Switch to Env B -> collection starts empty
+    db.set_active_api_environment("env-b")
+    assert db.list_api_nodes() == []
+
+    req_b = db.upsert_api_node(
+        {
+            "id": "req-b",
+            "name": "Request B",
+            "node_type": "request",
+            "method": "GET",
+            "path": "/b",
+        }
+    )
+    assert req_b["environment_id"] == "env-b"
+    assert [n["id"] for n in db.list_api_nodes()] == ["req-b"]
+
+    # Cannot attach a node in Env B to a parent in Env A
+    with pytest.raises(ValueError):
+        db.upsert_api_node(
+            {
+                "id": "req-b-bad",
+                "parent_id": "grp-a",
+                "name": "Bad Parent",
+                "node_type": "request",
+            }
+        )
+
+    with pytest.raises(ValueError):
+        db.move_api_node(node_id="req-b", target_parent_id="grp-a", target_index=0)
+
+    # Updating run status in Env B does not touch Env A
+    db.update_api_node_run_status(
+        "req-a", 500, 99.0, "failed", {"size_bytes": 0}, environment_id="env-b"
+    )
+
+    # Switch back to Env A -> original hierarchy, fields, and run status intact
+    db.set_active_api_environment("env-a")
+    nodes_a = {n["id"]: n for n in db.list_api_nodes()}
+    assert set(nodes_a.keys()) == {"grp-a", "req-a"}
+    assert nodes_a["req-a"]["parent_id"] == "grp-a"
+    assert nodes_a["req-a"]["method"] == "POST"
+    assert nodes_a["req-a"]["path"] == "/a"
+    assert nodes_a["req-a"]["body"] == '{"a": 1}'
+    assert nodes_a["req-a"]["last_status"] == 200
+    assert nodes_a["req-a"]["last_outcome"] == "passed"
+
+    # Deleting active Env A cascade-deletes Env A's nodes and activates Env B
+    assert db.delete_api_environment("env-a") is True
+    envs_remaining = db.list_api_environments()
+    assert len(envs_remaining) == 1
+    assert envs_remaining[0]["id"] == "env-b"
+    assert envs_remaining[0]["is_active"] is True
+    assert [n["id"] for n in db.list_api_nodes()] == ["req-b"]
+
+
+def test_legacy_db_migration_assigns_unscoped_nodes_idempotently(tmp_path: Path):
+    # Case 1: Legacy DB with existing active environment and unscoped nodes
+    legacy_db_1 = tmp_path / "legacy_with_env.db"
+    conn = sqlite3.connect(str(legacy_db_1))
+    conn.execute(
+        """
+        CREATE TABLE api_environments (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            base_url TEXT NOT NULL DEFAULT '',
+            auth_type TEXT NOT NULL DEFAULT 'none',
+            auth_config TEXT NOT NULL DEFAULT '{}',
+            default_headers TEXT NOT NULL DEFAULT '[]',
+            is_active INTEGER NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE api_nodes (
+            id TEXT PRIMARY KEY,
+            parent_id TEXT DEFAULT NULL,
+            node_type TEXT NOT NULL DEFAULT 'request',
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            method TEXT NOT NULL DEFAULT 'GET',
+            path TEXT NOT NULL DEFAULT '',
+            query_params TEXT NOT NULL DEFAULT '[]',
+            headers TEXT NOT NULL DEFAULT '[]',
+            body_type TEXT NOT NULL DEFAULT 'json',
+            body TEXT NOT NULL DEFAULT '',
+            expected_status INTEGER NOT NULL DEFAULT 200,
+            last_status INTEGER DEFAULT NULL,
+            last_duration_ms REAL DEFAULT NULL,
+            last_outcome TEXT DEFAULT NULL,
+            last_response_meta TEXT NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    conn.execute(
+        "INSERT INTO api_environments (id, name, base_url, is_active) VALUES ('env-1', 'First', 'http://1', 0)"
+    )
+    conn.execute(
+        "INSERT INTO api_environments (id, name, base_url, is_active) VALUES ('env-2', 'Active Env', 'http://2', 1)"
+    )
+    conn.execute(
+        "INSERT INTO api_nodes (id, name, node_type, method, path) VALUES ('legacy-req', 'Legacy API', 'request', 'GET', '/legacy')"
+    )
+    conn.commit()
+    conn.close()
+
+    db1 = ApiDeckDatabase(target_path=tmp_path, db_path=legacy_db_1)
+    nodes_env2 = db1.list_api_nodes()
+    assert len(nodes_env2) == 1
+    assert nodes_env2[0]["id"] == "legacy-req"
+    assert nodes_env2[0]["environment_id"] == "env-2"
+
+    # Switch active env to env-1 and simulate restart (clear inode cache)
+    db1.set_active_api_environment("env-1")
+    _INITIALIZED_API_DB_INODES.clear()
+    db1_restarted = ApiDeckDatabase(target_path=tmp_path, db_path=legacy_db_1)
+    assert db1_restarted.list_api_nodes() == []
+    db1_restarted.set_active_api_environment("env-2")
+    assert [n["id"] for n in db1_restarted.list_api_nodes()] == ["legacy-req"]
+
+    # Case 2: Legacy DB with unscoped nodes and NO environments at all
+    legacy_db_2 = tmp_path / "legacy_no_env.db"
+    conn2 = sqlite3.connect(str(legacy_db_2))
+    conn2.execute(
+        """
+        CREATE TABLE api_nodes (
+            id TEXT PRIMARY KEY,
+            parent_id TEXT DEFAULT NULL,
+            node_type TEXT NOT NULL DEFAULT 'request',
+            name TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            method TEXT NOT NULL DEFAULT 'GET',
+            path TEXT NOT NULL DEFAULT '',
+            query_params TEXT NOT NULL DEFAULT '[]',
+            headers TEXT NOT NULL DEFAULT '[]',
+            body_type TEXT NOT NULL DEFAULT 'json',
+            body TEXT NOT NULL DEFAULT '',
+            expected_status INTEGER NOT NULL DEFAULT 200,
+            last_status INTEGER DEFAULT NULL,
+            last_duration_ms REAL DEFAULT NULL,
+            last_outcome TEXT DEFAULT NULL,
+            last_response_meta TEXT NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    conn2.execute(
+        "INSERT INTO api_nodes (id, name, node_type, method, path) VALUES ('orphan-req', 'Orphan API', 'request', 'GET', '/orphan')"
+    )
+    conn2.commit()
+    conn2.close()
+
+    db2 = ApiDeckDatabase(target_path=tmp_path, db_path=legacy_db_2)
+    envs2 = db2.list_api_environments()
+    assert len(envs2) == 1
+    assert envs2[0]["name"] == "Default Environment"
+    assert envs2[0]["is_active"] is True
+    nodes2 = db2.list_api_nodes()
+    assert len(nodes2) == 1
+    assert nodes2[0]["id"] == "orphan-req"
+    assert nodes2[0]["environment_id"] == envs2[0]["id"]

@@ -123,6 +123,7 @@ class ApiDeckDatabase:
                 """
                 CREATE TABLE IF NOT EXISTS api_nodes (
                     id TEXT PRIMARY KEY,
+                    environment_id TEXT NOT NULL DEFAULT '',
                     parent_id TEXT DEFAULT NULL,
                     node_type TEXT NOT NULL DEFAULT 'request',
                     name TEXT NOT NULL,
@@ -142,12 +143,84 @@ class ApiDeckDatabase:
                 );
                 """
             )
+            cols = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(api_nodes)").fetchall()
+            }
+            if "environment_id" not in cols:
+                conn.execute(
+                    "ALTER TABLE api_nodes ADD COLUMN environment_id TEXT NOT NULL DEFAULT ''"
+                )
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_api_nodes_parent ON api_nodes(parent_id, sort_order);
                 """
             )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_api_nodes_env_parent ON api_nodes(environment_id, parent_id, sort_order);
+                """
+            )
+            legacy_row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM api_nodes WHERE COALESCE(environment_id, '') = ''"
+            ).fetchone()
+            if legacy_row and int(legacy_row["cnt"]) > 0:
+                target_env_id = self._ensure_active_environment_id(conn)
+                conn.execute(
+                    "UPDATE api_nodes SET environment_id = ? WHERE COALESCE(environment_id, '') = ''",
+                    (target_env_id,),
+                )
             conn.commit()
+
+    def _get_active_environment_id(self, conn: sqlite3.Connection) -> str | None:
+        active_row = conn.execute(
+            "SELECT id FROM api_environments WHERE is_active = 1 ORDER BY rowid ASC LIMIT 1"
+        ).fetchone()
+        if active_row:
+            return str(active_row["id"])
+        first_row = conn.execute(
+            "SELECT id FROM api_environments ORDER BY rowid ASC LIMIT 1"
+        ).fetchone()
+        return str(first_row["id"]) if first_row else None
+
+    def _ensure_active_environment_id(
+        self, conn: sqlite3.Connection, preferred_env_id: str | None = None
+    ) -> str:
+        if preferred_env_id:
+            pref_row = conn.execute(
+                "SELECT id FROM api_environments WHERE id = ?", (preferred_env_id,)
+            ).fetchone()
+            if pref_row:
+                return str(pref_row["id"])
+
+        active_row = conn.execute(
+            "SELECT id FROM api_environments WHERE is_active = 1 ORDER BY rowid ASC LIMIT 1"
+        ).fetchone()
+        if active_row:
+            return str(active_row["id"])
+
+        first_row = conn.execute(
+            "SELECT id FROM api_environments ORDER BY rowid ASC LIMIT 1"
+        ).fetchone()
+        if first_row:
+            env_id = str(first_row["id"])
+            conn.execute(
+                "UPDATE api_environments SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (env_id,),
+            )
+            return env_id
+
+        default_id = f"env-{uuid.uuid4().hex[:8]}"
+        conn.execute(
+            """
+            INSERT INTO api_environments (
+                id, name, base_url, auth_type, auth_config, default_headers, is_active, updated_at
+            )
+            VALUES (?, 'Default Environment', 'http://127.0.0.1:9388', 'none', '{}', '[]', 1, CURRENT_TIMESTAMP)
+            """,
+            (default_id,),
+        )
+        return default_id
 
     @staticmethod
     def _parse_json_field(raw: str | None, default: Any) -> Any:
@@ -172,6 +245,7 @@ class ApiDeckDatabase:
     def _row_to_api_node(self, row: sqlite3.Row) -> dict[str, Any]:
         return {
             "id": row["id"],
+            "environment_id": row["environment_id"] or "",
             "parent_id": row["parent_id"],
             "node_type": row["node_type"] or "request",
             "name": row["name"],
@@ -256,28 +330,57 @@ class ApiDeckDatabase:
             return cur.rowcount > 0
 
     def delete_api_environment(self, env_id: str) -> bool:
-        """Deletes an API environment by ID."""
+        """Deletes an API environment by ID, cascade-deleting its nodes and activating the next environment if needed."""
         with self._get_connection() as conn:
+            existing = conn.execute(
+                "SELECT id, is_active FROM api_environments WHERE id = ?", (env_id,)
+            ).fetchone()
+            if existing is None:
+                return False
+            conn.execute("DELETE FROM api_nodes WHERE environment_id = ?", (env_id,))
             cur = conn.execute("DELETE FROM api_environments WHERE id = ?", (env_id,))
+            active_left = conn.execute(
+                "SELECT id FROM api_environments WHERE is_active = 1 LIMIT 1"
+            ).fetchone()
+            if active_left is None:
+                next_env = conn.execute(
+                    "SELECT id FROM api_environments ORDER BY rowid ASC LIMIT 1"
+                ).fetchone()
+                if next_env is not None:
+                    conn.execute(
+                        "UPDATE api_environments SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (next_env["id"],),
+                    )
             conn.commit()
             return cur.rowcount > 0
 
-    def list_api_nodes(self) -> list[dict[str, Any]]:
-        """Returns all API request and group nodes ordered by sort_order and rowid."""
+    def list_api_nodes(self, environment_id: str | None = None) -> list[dict[str, Any]]:
+        """Returns API request and group nodes for the active (or specified) environment ordered by sort_order and rowid."""
         with self._get_connection() as conn:
+            env_id = (
+                environment_id
+                if environment_id is not None
+                else self._get_active_environment_id(conn)
+            )
+            if not env_id:
+                return []
             cur = conn.execute(
                 """
-                SELECT id, parent_id, node_type, name, sort_order, method, path,
+                SELECT id, environment_id, parent_id, node_type, name, sort_order, method, path,
                        query_params, headers, body_type, body, expected_status,
                        last_status, last_duration_ms, last_outcome, last_response_meta
                 FROM api_nodes
+                WHERE environment_id = ?
                 ORDER BY sort_order ASC, rowid ASC
-                """
+                """,
+                (env_id,),
             )
             return [self._row_to_api_node(r) for r in cur.fetchall()]
 
-    def upsert_api_node(self, node_data: dict[str, Any]) -> dict[str, Any]:
-        """Inserts or updates an API group or request node."""
+    def upsert_api_node(
+        self, node_data: dict[str, Any], environment_id: str | None = None
+    ) -> dict[str, Any]:
+        """Inserts or updates an API group or request node within its environment."""
         node_id = str(node_data.get("id") or f"api-{uuid.uuid4().hex[:8]}")
         node_type = str(node_data.get("node_type") or "request").strip().lower()
         if node_type not in ("group", "request"):
@@ -294,32 +397,69 @@ class ApiDeckDatabase:
         body_type = str(node_data.get("body_type") or "json").strip().lower()
         body = str(node_data.get("body") if node_data.get("body") is not None else "")
         expected_status = int(node_data.get("expected_status") or 200)
+        req_env_id = (
+            str(environment_id or node_data.get("environment_id") or "").strip() or None
+        )
 
         with self._get_connection() as conn:
+            active_env_id = self._ensure_active_environment_id(conn, req_env_id)
             existing = conn.execute(
-                "SELECT sort_order, parent_id FROM api_nodes WHERE id = ?", (node_id,)
+                "SELECT environment_id, sort_order, parent_id FROM api_nodes WHERE id = ?",
+                (node_id,),
             ).fetchone()
+            if existing is not None:
+                existing_env_id = str(existing["environment_id"] or "")
+                if existing_env_id:
+                    if req_env_id and req_env_id != existing_env_id:
+                        raise ValueError("Cannot move node across environments")
+                    if not req_env_id and existing_env_id != active_env_id:
+                        raise ValueError("Node belongs to a different environment")
+                    target_env_id = existing_env_id
+                else:
+                    target_env_id = req_env_id or active_env_id
+            else:
+                target_env_id = self._ensure_active_environment_id(
+                    conn, req_env_id or active_env_id
+                )
+
+            if "parent_id" not in node_data and existing is not None:
+                parent_id = existing["parent_id"]
+
+            if parent_id is not None:
+                parent_row = conn.execute(
+                    "SELECT id, environment_id FROM api_nodes WHERE id = ?",
+                    (parent_id,),
+                ).fetchone()
+                if (
+                    parent_row is None
+                    or str(parent_row["environment_id"] or "") != target_env_id
+                ):
+                    raise ValueError(
+                        "Parent node does not belong to the target environment"
+                    )
+
             if "sort_order" in node_data and node_data["sort_order"] is not None:
                 sort_order = int(node_data["sort_order"])
             elif existing is not None:
                 sort_order = int(existing["sort_order"] or 0)
             else:
                 max_row = conn.execute(
-                    "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM api_nodes WHERE COALESCE(parent_id, '') = COALESCE(?, '')",
-                    (parent_id,),
+                    """
+                    SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order
+                    FROM api_nodes
+                    WHERE environment_id = ? AND COALESCE(parent_id, '') = COALESCE(?, '')
+                    """,
+                    (target_env_id, parent_id),
                 ).fetchone()
                 sort_order = int(max_row["next_order"] if max_row else 0)
-
-            if "parent_id" not in node_data and existing is not None:
-                parent_id = existing["parent_id"]
 
             conn.execute(
                 """
                 INSERT INTO api_nodes (
-                    id, parent_id, node_type, name, sort_order, method, path,
+                    id, environment_id, parent_id, node_type, name, sort_order, method, path,
                     query_params, headers, body_type, body, expected_status, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(id) DO UPDATE SET
                     parent_id=excluded.parent_id,
                     node_type=excluded.node_type,
@@ -336,6 +476,7 @@ class ApiDeckDatabase:
                 """,
                 (
                     node_id,
+                    target_env_id,
                     parent_id,
                     node_type,
                     name,
@@ -352,7 +493,7 @@ class ApiDeckDatabase:
             conn.commit()
             row = conn.execute(
                 """
-                SELECT id, parent_id, node_type, name, sort_order, method, path,
+                SELECT id, environment_id, parent_id, node_type, name, sort_order, method, path,
                        query_params, headers, body_type, body, expected_status,
                        last_status, last_duration_ms, last_outcome, last_response_meta
                 FROM api_nodes WHERE id = ?
@@ -368,27 +509,54 @@ class ApiDeckDatabase:
         duration_ms: float | None,
         outcome: str,
         meta: dict[str, Any] | None = None,
+        environment_id: str | None = None,
     ) -> None:
-        """Updates the last execution status, latency, and outcome for an API request node."""
+        """Updates the last execution status, latency, and outcome for an API request node in the active environment."""
         with self._get_connection() as conn:
-            conn.execute(
-                """
-                UPDATE api_nodes
-                SET last_status = ?,
-                    last_duration_ms = ?,
-                    last_outcome = ?,
-                    last_response_meta = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (
-                    status_code,
-                    duration_ms,
-                    outcome,
-                    json.dumps(meta or {}),
-                    node_id,
-                ),
+            env_id = (
+                environment_id
+                if environment_id is not None
+                else self._get_active_environment_id(conn)
             )
+            if env_id:
+                conn.execute(
+                    """
+                    UPDATE api_nodes
+                    SET last_status = ?,
+                        last_duration_ms = ?,
+                        last_outcome = ?,
+                        last_response_meta = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND environment_id = ?
+                    """,
+                    (
+                        status_code,
+                        duration_ms,
+                        outcome,
+                        json.dumps(meta or {}),
+                        node_id,
+                        env_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE api_nodes
+                    SET last_status = ?,
+                        last_duration_ms = ?,
+                        last_outcome = ?,
+                        last_response_meta = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        status_code,
+                        duration_ms,
+                        outcome,
+                        json.dumps(meta or {}),
+                        node_id,
+                    ),
+                )
             conn.commit()
 
     def move_api_node(
@@ -396,36 +564,83 @@ class ApiDeckDatabase:
         node_id: str,
         target_parent_id: str | None = None,
         target_index: int = 0,
+        environment_id: str | None = None,
     ) -> dict[str, Any]:
-        """Moves an API node to a new parent and sibling sort order."""
+        """Moves an API node to a new parent and sibling sort order within the same environment."""
         with self._get_connection() as conn:
+            active_env_id = (
+                environment_id
+                if environment_id is not None
+                else self._get_active_environment_id(conn)
+            )
+            node_row = conn.execute(
+                "SELECT id, environment_id FROM api_nodes WHERE id = ?",
+                (node_id,),
+            ).fetchone()
+            if node_row is None:
+                raise ValueError("Node not found")
+            env_id = str(node_row["environment_id"] or "")
+            if active_env_id and env_id != active_env_id:
+                raise ValueError("Node does not belong to the active environment")
+
+            if target_parent_id is not None:
+                parent_row = conn.execute(
+                    "SELECT id, environment_id FROM api_nodes WHERE id = ?",
+                    (target_parent_id,),
+                ).fetchone()
+                if (
+                    parent_row is None
+                    or str(parent_row["environment_id"] or "") != env_id
+                ):
+                    raise ValueError(
+                        "Target parent does not belong to the same environment"
+                    )
+
             siblings = conn.execute(
                 """
                 SELECT id FROM api_nodes
-                WHERE COALESCE(parent_id, '') = COALESCE(?, '') AND id != ?
+                WHERE environment_id = ? AND COALESCE(parent_id, '') = COALESCE(?, '') AND id != ?
                 ORDER BY sort_order ASC, rowid ASC
                 """,
-                (target_parent_id, node_id),
+                (env_id, target_parent_id, node_id),
             ).fetchall()
             ordered_ids = [r["id"] for r in siblings]
             idx = max(0, min(int(target_index), len(ordered_ids)))
             ordered_ids.insert(idx, node_id)
 
             conn.execute(
-                "UPDATE api_nodes SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (target_parent_id, node_id),
+                "UPDATE api_nodes SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND environment_id = ?",
+                (target_parent_id, node_id, env_id),
             )
             for i, sid in enumerate(ordered_ids):
                 conn.execute(
-                    "UPDATE api_nodes SET sort_order = ? WHERE id = ?",
-                    (i, sid),
+                    "UPDATE api_nodes SET sort_order = ? WHERE id = ? AND environment_id = ?",
+                    (i, sid, env_id),
                 )
             conn.commit()
-            return {"group_id": None, "nodes": self.list_api_nodes()}
+            return {
+                "group_id": None,
+                "nodes": self.list_api_nodes(environment_id=env_id),
+            }
 
-    def delete_api_node(self, node_id: str) -> int:
-        """Deletes an API node and recursively deletes any child nodes if it is a group."""
+    def delete_api_node(
+        self, node_id: str, environment_id: str | None = None
+    ) -> int:
+        """Deletes an API node in the active environment and recursively deletes any child nodes if it is a group."""
         with self._get_connection() as conn:
+            env_id = (
+                environment_id
+                if environment_id is not None
+                else self._get_active_environment_id(conn)
+            )
+            if not env_id:
+                return 0
+            root_row = conn.execute(
+                "SELECT id FROM api_nodes WHERE id = ? AND environment_id = ?",
+                (node_id, env_id),
+            ).fetchone()
+            if root_row is None:
+                return 0
             to_delete = [node_id]
             visited: set[str] = set()
             while to_delete:
@@ -434,7 +649,8 @@ class ApiDeckDatabase:
                     continue
                 visited.add(curr)
                 children = conn.execute(
-                    "SELECT id FROM api_nodes WHERE parent_id = ?", (curr,)
+                    "SELECT id FROM api_nodes WHERE parent_id = ? AND environment_id = ?",
+                    (curr, env_id),
                 ).fetchall()
                 for c in children:
                     to_delete.append(c["id"])
@@ -443,8 +659,8 @@ class ApiDeckDatabase:
                 return 0
             placeholders = ",".join(["?"] * len(visited))
             cur = conn.execute(
-                f"DELETE FROM api_nodes WHERE id IN ({placeholders})",
-                list(visited),
+                f"DELETE FROM api_nodes WHERE environment_id = ? AND id IN ({placeholders})",
+                [env_id, *list(visited)],
             )
             conn.commit()
             return cur.rowcount

@@ -21,6 +21,7 @@ class ApiCollectionNode:
 
     id: str
     name: str
+    environment_id: str = ""
     node_type: str = "request"
     parent_id: str | None = None
     sort_order: int = 0

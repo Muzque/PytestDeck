@@ -216,3 +216,61 @@ async def test_api_routes_send_batch_stress_and_mock_large(tmp_path: Path, monke
     large_payload = await mock_large_endpoint(lines=50, keyword="NEEDLE")
     assert large_payload["total_lines"] == 50
     assert any(r["tag"] == "NEEDLE" for r in large_payload["records"])
+
+
+@pytest.mark.anyio
+async def test_api_routes_scope_collections_by_environment(tmp_path: Path, monkeypatch):
+    db_file = tmp_path / "api_deck_env_scope.db"
+    monkeypatch.setenv("PYTESTDECK_API_DB_PATH", str(db_file))
+
+    await save_api_environment(
+        SaveEnvironmentRequest(
+            target_path=str(tmp_path),
+            environment={
+                "id": "env-a",
+                "name": "Env A",
+                "base_url": "http://localhost:8001",
+                "is_active": True,
+            },
+        )
+    )
+    await upsert_api_node(
+        UpsertApiNodeRequest(
+            target_path=str(tmp_path),
+            node={"id": "req-a", "name": "Req A", "node_type": "request", "method": "GET", "path": "/a"},
+        )
+    )
+
+    # Save and activate Env B -> nodes for Env B are empty
+    env_b_res = await save_api_environment(
+        SaveEnvironmentRequest(
+            target_path=str(tmp_path),
+            environment={
+                "id": "env-b",
+                "name": "Env B",
+                "base_url": "http://localhost:8002",
+                "is_active": True,
+            },
+        )
+    )
+    assert env_b_res["nodes"] == []
+    state_b = await get_api_deck_state(target_path=str(tmp_path))
+    assert state_b["nodes"] == []
+
+    await upsert_api_node(
+        UpsertApiNodeRequest(
+            target_path=str(tmp_path),
+            node={"id": "req-b", "name": "Req B", "node_type": "request", "method": "GET", "path": "/b"},
+        )
+    )
+
+    # Switching back to Env A returns only Env A's nodes
+    act_a = await activate_api_environment(
+        "env-a", ActivateEnvironmentRequest(target_path=str(tmp_path))
+    )
+    assert [n["id"] for n in act_a["nodes"]] == ["req-a"]
+
+    # Deleting Env A cascade-deletes req-a, activates Env B, and returns Env B's nodes
+    del_a = await delete_api_environment("env-a", target_path=str(tmp_path))
+    assert del_a["success"] is True
+    assert [n["id"] for n in del_a["nodes"]] == ["req-b"]

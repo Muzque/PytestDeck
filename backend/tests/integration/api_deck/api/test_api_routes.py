@@ -101,3 +101,30 @@ def test_api_deck_routes_end_to_end(tmp_path: Path, monkeypatch):
     mock_large = client.get("/api/api-deck/mock/large?lines=120&keyword=SEARCH_TARGET")
     assert mock_large.status_code == 200
     assert "SEARCH_TARGET" in mock_large.text
+
+    # 6. Create a second active environment -> collection is isolated per environment
+    env2_res = client.post(
+        "/api/api-deck/environments",
+        json={
+            "target_path": str(tmp_path),
+            "environment": {
+                "id": "env-2",
+                "name": "Staging Mock",
+                "base_url": "http://127.0.0.1:9388",
+                "is_active": True,
+            },
+        },
+    )
+    assert env2_res.status_code == 200
+    assert env2_res.json()["nodes"] == []
+
+    state_env2 = client.get("/api/api-deck/state", params={"target_path": str(tmp_path)})
+    assert state_env2.json()["nodes"] == []
+
+    # Switching back to env-1 restores env-1's collection
+    act_env1 = client.put(
+        "/api/api-deck/environments/env-1/activate",
+        json={"target_path": str(tmp_path)},
+    )
+    assert act_env1.status_code == 200
+    assert [n["id"] for n in act_env1.json()["nodes"]] == ["api-2", "api-1"]
