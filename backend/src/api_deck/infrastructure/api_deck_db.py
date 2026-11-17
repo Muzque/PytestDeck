@@ -396,42 +396,9 @@ class ApiDeckDatabase:
         node_id: str,
         target_parent_id: str | None = None,
         target_index: int = 0,
-        create_group_with_node_id: str | None = None,
-        group_name: str | None = None,
     ) -> dict[str, Any]:
-        """Moves an API node to a new parent/order or groups it with another node via drag-and-drop."""
+        """Moves an API node to a new parent and sibling sort order."""
         with self._get_connection() as conn:
-            if create_group_with_node_id and create_group_with_node_id != node_id:
-                target_row = conn.execute(
-                    "SELECT id, parent_id, sort_order, name FROM api_nodes WHERE id = ?",
-                    (create_group_with_node_id,),
-                ).fetchone()
-                if target_row:
-                    new_group_id = f"grp-{uuid.uuid4().hex[:8]}"
-                    g_name = (group_name or f"{target_row['name']} Group").strip()
-                    conn.execute(
-                        """
-                        INSERT INTO api_nodes (id, parent_id, node_type, name, sort_order, method, path, updated_at)
-                        VALUES (?, ?, 'group', ?, ?, 'GET', '', CURRENT_TIMESTAMP)
-                        """,
-                        (
-                            new_group_id,
-                            target_row["parent_id"],
-                            g_name,
-                            int(target_row["sort_order"] or 0),
-                        ),
-                    )
-                    conn.execute(
-                        "UPDATE api_nodes SET parent_id = ?, sort_order = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (new_group_id, create_group_with_node_id),
-                    )
-                    conn.execute(
-                        "UPDATE api_nodes SET parent_id = ?, sort_order = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (new_group_id, node_id),
-                    )
-                    conn.commit()
-                    return {"group_id": new_group_id, "nodes": self.list_api_nodes()}
-
             siblings = conn.execute(
                 """
                 SELECT id FROM api_nodes

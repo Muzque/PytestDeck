@@ -32,8 +32,6 @@ class MoveApiNodeRequest(BaseModel):
     node_id: str
     target_parent_id: str | None = None
     target_index: int = 0
-    create_group_with_node_id: str | None = None
-    group_name: str | None = None
 
 
 class SendSingleApiRequest(BaseModel):
@@ -153,8 +151,6 @@ async def move_api_node(req: MoveApiNodeRequest):
             node_id=req.node_id,
             target_parent_id=req.target_parent_id,
             target_index=req.target_index,
-            create_group_with_node_id=req.create_group_with_node_id,
-            group_name=req.group_name,
         )
         return {
             "success": True,

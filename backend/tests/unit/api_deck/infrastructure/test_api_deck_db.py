@@ -86,23 +86,37 @@ def test_api_nodes_upsert_group_move_and_cascade_delete(tmp_path: Path):
     assert req1["id"] == "req-1"
     assert req2["method"] == "POST"
 
-    # Drag req-2 onto req-1 to automatically create a group containing both
-    grouped = db.move_api_node(
+    # Drag req-2 before req-1 -> reorders siblings at root without creating any group
+    reordered = db.move_api_node(
         node_id="req-2",
         target_parent_id=None,
         target_index=0,
-        create_group_with_node_id="req-1",
-        group_name="Users Group",
     )
-    assert grouped["group_id"] is not None
-    group_id = grouped["group_id"]
+    assert reordered["group_id"] is None
+    assert [n["id"] for n in reordered["nodes"]] == ["req-2", "req-1"]
+    assert all(n["node_type"] == "request" for n in reordered["nodes"])
+
+    # Create a group manually and move both requests into it
+    grp = db.upsert_api_node(
+        {"id": "grp-users", "name": "Users Group", "node_type": "group"}
+    )
+    db.move_api_node(node_id="req-1", target_parent_id=grp["id"], target_index=0)
+    db.move_api_node(node_id="req-2", target_parent_id=grp["id"], target_index=1)
+    # Reorder within the group: move req-2 before req-1
+    in_group = db.move_api_node(
+        node_id="req-2", target_parent_id=grp["id"], target_index=0
+    )
+    assert in_group["group_id"] is None
 
     nodes = {n["id"]: n for n in db.list_api_nodes()}
+    group_id = grp["id"]
     assert group_id in nodes
     assert nodes[group_id]["node_type"] == "group"
     assert nodes[group_id]["name"] == "Users Group"
     assert nodes["req-1"]["parent_id"] == group_id
     assert nodes["req-2"]["parent_id"] == group_id
+    assert nodes["req-2"]["sort_order"] == 0
+    assert nodes["req-1"]["sort_order"] == 1
 
     # Update run status on req-1
     db.update_api_node_run_status(

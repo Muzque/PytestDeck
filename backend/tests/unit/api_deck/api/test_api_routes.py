@@ -89,17 +89,44 @@ async def test_api_routes_environment_and_node_handlers(tmp_path: Path, monkeypa
     assert n1["node"]["id"] == "r1"
     assert len(n2["nodes"]) == 2
 
+    # Move r2 before r1 as siblings (does not auto-create a group)
     moved = await move_api_node(
         MoveApiNodeRequest(
             target_path=str(tmp_path),
             node_id="r2",
-            create_group_with_node_id="r1",
-            group_name="Grouped",
+            target_parent_id=None,
+            target_index=0,
         )
     )
-    assert moved["group_id"] is not None
+    assert moved["group_id"] is None
+    assert [n["id"] for n in moved["nodes"]] == ["r2", "r1"]
+    assert all(n["node_type"] == "request" for n in moved["nodes"])
 
-    del_node = await delete_api_node(moved["group_id"], target_path=str(tmp_path))
+    # Create a group manually, move r1 & r2 into it, then cascade delete
+    grp = await upsert_api_node(
+        UpsertApiNodeRequest(
+            target_path=str(tmp_path),
+            node={"id": "grp-1", "name": "Grouped", "node_type": "group"},
+        )
+    )
+    await move_api_node(
+        MoveApiNodeRequest(
+            target_path=str(tmp_path),
+            node_id="r1",
+            target_parent_id=grp["node"]["id"],
+            target_index=0,
+        )
+    )
+    await move_api_node(
+        MoveApiNodeRequest(
+            target_path=str(tmp_path),
+            node_id="r2",
+            target_parent_id=grp["node"]["id"],
+            target_index=1,
+        )
+    )
+
+    del_node = await delete_api_node(grp["node"]["id"], target_path=str(tmp_path))
     assert del_node["deleted_count"] == 3
     assert del_node["nodes"] == []
 
