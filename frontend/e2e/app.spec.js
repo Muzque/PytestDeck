@@ -1739,10 +1739,13 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('#btn-new-api')).toBeVisible()
 
     // Clean any pre-existing API nodes in this repo first
+    await page.waitForSelector('.api-tree-container, .api-empty-state', { timeout: 10000 })
+    await page.waitForTimeout(300)
     const existingDeletes = page.locator('.btn-delete-node')
     while ((await existingDeletes.count()) > 0) {
+      const beforeCount = await existingDeletes.count()
       await existingDeletes.first().click({ force: true })
-      await page.waitForTimeout(100)
+      await expect.poll(async () => existingDeletes.count(), { timeout: 5000 }).toBeLessThan(beforeCount)
     }
 
     // 2. Configure Address & Auth and save to SQLite DB
@@ -1824,6 +1827,45 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('[data-testid="api-batch-summary"]')).toBeVisible({ timeout: 15000 })
     await expect(page.locator('[data-testid="batch-total-count"]')).toHaveText('2')
     await expect(page.locator('[data-testid="batch-passed-count"]')).toHaveText('2')
+
+    // 7. Verify 2xx passes (201), 4xx warns (403), and 5xx fails (500)
+    await page.click('#btn-new-api')
+    await page.fill('#api-req-name', 'Created 201 API')
+    await page.fill('#api-path-input', '/api/api-deck/mock/echo?status=201')
+    await page.waitForTimeout(350)
+    await page.click('#btn-send-api')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveText('201')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveClass(/passed/)
+
+    await page.click('#btn-new-api')
+    await page.fill('#api-req-name', 'Forbidden 403 API')
+    await page.fill('#api-path-input', '/api/api-deck/mock/echo?status=403')
+    await page.waitForTimeout(350)
+    await page.click('#btn-send-api')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveText('403')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveClass(/warning/)
+    await expect(page.locator('.api-node-row:has-text("Forbidden 403 API")')).toHaveClass(/outcome-warning/)
+
+    await page.click('#btn-new-api')
+    await page.fill('#api-req-name', 'Error 500 API')
+    await page.fill('#api-path-input', '/api/api-deck/mock/echo?status=500')
+    await page.waitForTimeout(350)
+    await page.click('#btn-send-api')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveText('500')
+    await expect(page.locator('[data-testid="api-response-status"]')).toHaveClass(/failed/)
+    await expect(page.locator('.api-node-row:has-text("Error 500 API")')).toHaveClass(/outcome-failed/)
+
+    // Batch run across 201 (pass), 403 (warning), 500 (fail)
+    await page.click('#btn-clear-api-selection')
+    await page.locator('.api-node-row:has-text("Created 201 API") .api-node-checkbox').click()
+    await page.locator('.api-node-row:has-text("Forbidden 403 API") .api-node-checkbox').click()
+    await page.locator('.api-node-row:has-text("Error 500 API") .api-node-checkbox').click()
+    await page.click('#btn-run-selected-apis')
+    await expect(page.locator('[data-testid="api-batch-summary"]')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('[data-testid="batch-total-count"]')).toHaveText('3')
+    await expect(page.locator('[data-testid="batch-passed-count"]')).toHaveText('1')
+    await expect(page.locator('[data-testid="batch-warning-count"]')).toHaveText('1')
+    await expect(page.locator('[data-testid="batch-failed-count"]')).toHaveText('1')
   })
 
   test('should enable Copy Failed button on Terminal Output header only when tests fail and copy final failed logs', async ({ page, context }) => {

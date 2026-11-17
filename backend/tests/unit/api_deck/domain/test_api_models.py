@@ -41,5 +41,6 @@ def test_api_stress_result_fields():
         status_codes={"200": 10},
     )
     assert res.total_requests == 10
+    assert res.warning_count == 0
     assert res.avg_ms == 4.5
     assert res.status_codes == {"200": 10}
