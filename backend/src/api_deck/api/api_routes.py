@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from api_deck.infrastructure.api_deck_db import ApiDeckDatabase
@@ -288,19 +289,25 @@ async def run_stress_api(req: StressApiRequest):
 
 
 @router.api_route("/mock/echo", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
-async def mock_echo_endpoint(request: Request):
+async def mock_echo_endpoint(
+    request: Request,
+    status: int = Query(200, ge=100, le=599),
+):
     """Built-in echo endpoint for testing API Deck requests, headers, query params, and bodies."""
     try:
         body: Any = await request.json()
     except Exception:
         raw = await request.body()
         body = raw.decode("utf-8", errors="replace") if raw else None
-    return {
-        "method": request.method,
-        "query": dict(request.query_params),
-        "headers": dict(request.headers),
-        "echo": body,
-    }
+    return JSONResponse(
+        status_code=status,
+        content={
+            "method": request.method,
+            "query": dict(request.query_params),
+            "headers": dict(request.headers),
+            "echo": body,
+        },
+    )
 
 
 @router.get("/mock/large")

@@ -51,5 +51,6 @@ class ApiStressResult:
     max_ms: float
     p95_ms: float
     rps: float
+    warning_count: int = 0
     status_codes: dict[str, int] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)

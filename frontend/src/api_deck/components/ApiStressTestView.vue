@@ -104,9 +104,10 @@ const fullUrl = computed(() => {
         </div>
 
         <div class="stress-kpi-card">
-          <span class="kpi-label">Success / Fail</span>
+          <span class="kpi-label">Success / Warn / Fail</span>
           <span class="kpi-value" data-testid="stress-success-fail">
             <span class="text-pass">{{ stressResult.success_count }}</span> /
+            <span class="text-warn">{{ stressResult.warning_count ?? 0 }}</span> /
             <span class="text-fail">{{ stressResult.fail_count }}</span>
           </span>
         </div>
@@ -290,6 +291,10 @@ const fullUrl = computed(() => {
 
 .text-pass {
   color: var(--accent-green);
+}
+
+.text-warn {
+  color: var(--accent-yellow);
 }
 
 .text-fail {
