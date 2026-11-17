@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 
 const props = defineProps({
   request: { type: Object, required: true },
@@ -83,6 +83,21 @@ const formatJsonBody = () => {
     updateField('body', JSON.stringify(parsed, null, 2))
   } catch {
     // Keep as-is if invalid JSON
+  }
+}
+
+const onBodyKeyDown = (e) => {
+  if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+    e.preventDefault()
+    const el = e.target
+    const start = el.selectionStart ?? 0
+    const end = el.selectionEnd ?? start
+    const val = String(props.request.body || '')
+    const nextVal = val.slice(0, start) + '  ' + val.slice(end)
+    updateField('body', nextVal)
+    nextTick(() => {
+      el.selectionStart = el.selectionEnd = start + 2
+    })
   }
 }
 
@@ -395,6 +410,7 @@ const formatBytes = (bytes) => {
           class="api-body-textarea"
           placeholder='{"key": "value"}'
           @input="updateField('body', $event.target.value)"
+          @keydown="onBodyKeyDown"
         ></textarea>
       </div>
     </div>

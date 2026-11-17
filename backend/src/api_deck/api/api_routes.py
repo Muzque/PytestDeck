@@ -98,6 +98,7 @@ async def save_api_environment(req: SaveEnvironmentRequest):
             "success": True,
             "environment": saved,
             "environments": db.list_api_environments(),
+            "nodes": db.list_api_nodes(),
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -111,6 +112,7 @@ async def activate_api_environment(env_id: str, req: ActivateEnvironmentRequest)
         return {
             "success": True,
             "environments": db.list_api_environments(),
+            "nodes": db.list_api_nodes(),
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -127,6 +129,7 @@ async def delete_api_environment(
         return {
             "success": deleted,
             "environments": db.list_api_environments(),
+            "nodes": db.list_api_nodes(),
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -141,6 +144,7 @@ async def upsert_api_node(req: UpsertApiNodeRequest):
             "success": True,
             "node": saved,
             "nodes": db.list_api_nodes(),
+            "environments": db.list_api_environments(),
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
