@@ -384,3 +384,23 @@ def test_legacy_db_migration_assigns_unscoped_nodes_idempotently(tmp_path: Path)
     assert len(nodes2) == 1
     assert nodes2[0]["id"] == "orphan-req"
     assert nodes2[0]["environment_id"] == envs2[0]["id"]
+
+
+def test_resolve_api_storage_dir_disambiguates_colliding_repo_names(
+    tmp_path: Path, monkeypatch
+):
+    from api_deck.infrastructure.api_deck_db import _resolve_api_storage_dir
+
+    monkeypatch.setenv("PYTESTDECK_ROOT", str(tmp_path))
+    repo_a = tmp_path / "workspace_a" / "my-service"
+    repo_b = tmp_path / "workspace_b" / "my-service"
+    repo_a.mkdir(parents=True)
+    repo_b.mkdir(parents=True)
+
+    storage_a = _resolve_api_storage_dir(repo_a)
+    (storage_a / ".target_path").write_text(str(repo_a.resolve()), encoding="utf-8")
+
+    storage_b = _resolve_api_storage_dir(repo_b)
+    assert storage_a.name == "my-service"
+    assert storage_b.name.startswith("my-service-")
+    assert storage_b != storage_a
