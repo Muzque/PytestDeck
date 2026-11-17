@@ -1739,10 +1739,13 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('#btn-new-api')).toBeVisible()
 
     // Clean any pre-existing API nodes in this repo first
+    await page.waitForSelector('.api-tree-container, .api-empty-state', { timeout: 10000 })
+    await page.waitForTimeout(300)
     const existingDeletes = page.locator('.btn-delete-node')
     while ((await existingDeletes.count()) > 0) {
+      const beforeCount = await existingDeletes.count()
       await existingDeletes.first().click({ force: true })
-      await page.waitForTimeout(100)
+      await expect.poll(async () => existingDeletes.count(), { timeout: 5000 }).toBeLessThan(beforeCount)
     }
 
     // 2. Configure Address & Auth and save to SQLite DB
@@ -1764,7 +1767,33 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await page.fill('.param-key-input', 'env')
     await page.fill('.param-val-input', 'test')
     await page.click('[data-req-tab="body"]')
-    await page.fill('#api-body-textarea', '{"hello":"pytestdeck"}')
+    const bodyTextarea = page.locator('#api-body-textarea')
+    await bodyTextarea.fill('{"hello":"pytestdeck"}')
+
+    // Verify Tab inserts 2 spaces at cursor without leaving #api-body-textarea, and modifier+Tab does not insert
+    await bodyTextarea.evaluate((el) => {
+      el.focus()
+      el.setSelectionRange(1, 1)
+    })
+    await page.keyboard.press('Tab')
+    await expect(bodyTextarea).toBeFocused()
+    await expect(bodyTextarea).toHaveValue('{  "hello":"pytestdeck"}')
+    const caretAfterTab = await bodyTextarea.evaluate((el) => el.selectionStart)
+    expect(caretAfterTab).toBe(3)
+
+    await page.keyboard.press('Alt+Tab')
+    await expect(bodyTextarea).toHaveValue('{  "hello":"pytestdeck"}')
+
+    // Verify Raw Text mode also supports Tab indentation, then restore JSON mode
+    await page.locator('input[type="radio"][value="text"]').check()
+    await bodyTextarea.evaluate((el) => {
+      el.focus()
+      el.setSelectionRange(0, 0)
+    })
+    await page.keyboard.press('Tab')
+    await expect(bodyTextarea).toHaveValue('  {  "hello":"pytestdeck"}')
+    await page.locator('input[type="radio"][value="json"]').check()
+    await bodyTextarea.fill('{"hello":"pytestdeck"}')
 
     // Wait for auto-save to complete
     await page.waitForTimeout(400)
@@ -1808,8 +1837,8 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('[data-testid="stress-success-fail"]')).toContainText('15')
 
     // 6. Drag-and-drop grouping & Batch execution of selected group
-    const echoNodeRow = page.locator('.api-node-row:has-text("Echo POST API")')
-    const hugeNodeRow = page.locator('.api-node-row:has-text("Huge Payload API")')
+    const echoNodeRow = page.locator('.api-node-row:has-text("Echo POST API")').last()
+    const hugeNodeRow = page.locator('.api-node-row:has-text("Huge Payload API")').last()
     await hugeNodeRow.dragTo(echoNodeRow)
 
     // Verify a group node was created containing both APIs
