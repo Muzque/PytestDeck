@@ -19,6 +19,7 @@ def test_api_environment_defaults():
 def test_api_collection_node_defaults():
     node = ApiCollectionNode(id="req-1", name="Health Check", path="/api/health")
     assert node.id == "req-1"
+    assert node.environment_id == ""
     assert node.node_type == "request"
     assert node.method == "GET"
     assert node.path == "/api/health"

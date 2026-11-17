@@ -161,6 +161,47 @@ export function useApiDeck(externalTargetPathRef = null) {
     }
   }
 
+  const resetActiveRequestToEmpty = () => {
+    isHydratingRequest = true
+    activeRequestId.value = null
+    activeRequest.value = {
+      id: '',
+      parent_id: null,
+      node_type: 'request',
+      name: 'New API Request',
+      method: 'GET',
+      path: '/api/health',
+      query_params: [{ key: '', value: '', enabled: true }],
+      headers: [{ key: '', value: '', enabled: true }],
+      body_type: 'json',
+      body: '',
+      expected_status: 200
+    }
+    nextTick(() => {
+      isHydratingRequest = false
+    })
+  }
+
+  const syncEditorAfterCollectionChange = (nextNodes) => {
+    apiNodes.value = nextNodes || []
+    selectedApiIds.value = new Set()
+    batchSummary.value = null
+    currentResponse.value = null
+    const existing = activeRequestId.value
+      ? apiNodes.value.find((n) => n.id === activeRequestId.value)
+      : null
+    if (existing) {
+      hydrateEditorFromNode(existing)
+      return
+    }
+    const firstReq = apiNodes.value.find((n) => n.node_type === 'request')
+    if (firstReq) {
+      hydrateEditorFromNode(firstReq)
+    } else {
+      resetActiveRequestToEmpty()
+    }
+  }
+
   const loadApiDeckState = async () => {
     try {
       const tp = encodeURIComponent(targetPathRef?.value || '')
@@ -173,6 +214,8 @@ export function useApiDeck(externalTargetPathRef = null) {
       const firstReq = apiNodes.value.find((n) => n.node_type === 'request')
       if (firstReq && (!activeRequestId.value || !apiNodes.value.some((n) => n.id === activeRequestId.value))) {
         hydrateEditorFromNode(firstReq)
+      } else if (!firstReq && activeRequestId.value && !apiNodes.value.some((n) => n.id === activeRequestId.value)) {
+        resetActiveRequestToEmpty()
       }
     } catch (err) {
       console.error('Failed to load API Deck state:', err)
@@ -299,6 +342,9 @@ export function useApiDeck(externalTargetPathRef = null) {
       })
       if (res.ok) {
         const data = await res.json()
+        if (data.environments) {
+          environments.value = data.environments
+        }
         if (data.nodes && activeRequest.value.id === clientId) {
           apiNodes.value = data.nodes.map((n) =>
             n.id === clientId
@@ -334,6 +380,9 @@ export function useApiDeck(externalTargetPathRef = null) {
       if (res.ok) {
         const data = await res.json()
         apiNodes.value = data.nodes || []
+        if (data.environments) {
+          environments.value = data.environments
+        }
         return data.node
       }
     } catch (err) {
@@ -515,6 +564,11 @@ export function useApiDeck(externalTargetPathRef = null) {
   }
 
   const saveEnvironment = async (envPayload) => {
+    const prevEnvId = activeEnv.value?.id || ''
+    const isSwitchingToNewActive = Boolean(envPayload?.is_active) && envPayload?.id !== prevEnvId
+    if (isSwitchingToNewActive && activeRequest.value.id) {
+      await flushAutoSave()
+    }
     try {
       const res = await fetch('/api/api-deck/environments', {
         method: 'POST',
@@ -527,6 +581,13 @@ export function useApiDeck(externalTargetPathRef = null) {
       if (res.ok) {
         const data = await res.json()
         environments.value = data.environments || []
+        if (Array.isArray(data.nodes)) {
+          if (isSwitchingToNewActive) {
+            syncEditorAfterCollectionChange(data.nodes)
+          } else {
+            apiNodes.value = data.nodes
+          }
+        }
         return data.environment
       }
     } catch (err) {
@@ -537,6 +598,9 @@ export function useApiDeck(externalTargetPathRef = null) {
 
   const activateEnvironment = async (envId) => {
     if (!envId) return
+    if (activeRequest.value.id) {
+      await flushAutoSave()
+    }
     try {
       const res = await fetch(`/api/api-deck/environments/${encodeURIComponent(envId)}/activate`, {
         method: 'PUT',
@@ -546,6 +610,7 @@ export function useApiDeck(externalTargetPathRef = null) {
       if (res.ok) {
         const data = await res.json()
         environments.value = data.environments || []
+        syncEditorAfterCollectionChange(data.nodes || [])
       }
     } catch (err) {
       console.error('Failed to activate environment:', err)
@@ -554,6 +619,10 @@ export function useApiDeck(externalTargetPathRef = null) {
 
   const deleteEnvironment = async (envId) => {
     if (!envId) return
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+      autoSaveTimer = null
+    }
     try {
       const tp = encodeURIComponent(targetPathRef?.value || '')
       const res = await fetch(`/api/api-deck/environments/${encodeURIComponent(envId)}?target_path=${tp}`, {
@@ -562,6 +631,7 @@ export function useApiDeck(externalTargetPathRef = null) {
       if (res.ok) {
         const data = await res.json()
         environments.value = data.environments || []
+        syncEditorAfterCollectionChange(data.nodes || [])
       }
     } catch (err) {
       console.error('Failed to delete environment:', err)
