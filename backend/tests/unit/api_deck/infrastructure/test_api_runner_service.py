@@ -200,6 +200,72 @@ async def test_2xx_passes_and_4xx_warns_across_single_batch_and_stress():
     assert stress["status_codes"]["403"] == 6
 
 
+def test_build_resolved_request_basic_and_api_key_auth():
+    basic_env = {
+        "base_url": "http://127.0.0.1:8000",
+        "auth_type": "basic",
+        "auth_config": {"username": "alice", "password": "secret"},
+    }
+    basic_req = build_resolved_request({"method": "GET", "path": "items"}, basic_env)
+    assert basic_req["url"] == "http://127.0.0.1:8000/items"
+    assert basic_req["headers"]["Authorization"].startswith("Basic ")
+
+    header_key_env = {
+        "base_url": "http://127.0.0.1:8000",
+        "auth_type": "api_key",
+        "auth_config": {"key": "X-API-Key", "value": "k-123", "in": "header"},
+    }
+    header_req = build_resolved_request({"method": "GET", "path": "/items"}, header_key_env)
+    assert header_req["headers"]["X-API-Key"] == "k-123"
+
+    query_key_env = {
+        "base_url": "http://127.0.0.1:8000",
+        "auth_type": "api_key",
+        "auth_config": {"key": "api_key", "value": "q-456", "in": "query"},
+    }
+    query_req = build_resolved_request({"method": "GET", "path": "/items"}, query_key_env)
+    assert query_req["params"]["api_key"] == "q-456"
+
+
+@pytest.mark.anyio
+async def test_execute_transport_errors_and_empty_batch():
+    async def failing_handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    failing_transport = httpx.MockTransport(failing_handler)
+    env = {"base_url": "http://test.local", "auth_type": "none"}
+    node = {"id": "req-err", "name": "Err", "method": "GET", "path": "/down"}
+
+    single = await execute_single_request(node, env, transport=failing_transport)
+    assert single["status_code"] is None
+    assert single["outcome"] == "failed"
+    assert "connection refused" in (single["error"] or "")
+
+    empty_batch = await execute_batch_requests([], env, transport=failing_transport)
+    assert empty_batch == {
+        "total": 0,
+        "passed": 0,
+        "warning": 0,
+        "failed": 0,
+        "avg_ms": 0.0,
+        "total_ms": 0.0,
+        "results": [],
+    }
+
+    stress = await execute_stress_test(
+        node=node,
+        env=env,
+        total_requests=3,
+        concurrency=2,
+        transport=failing_transport,
+    )
+    assert stress["success_count"] == 0
+    assert stress["warning_count"] == 0
+    assert stress["fail_count"] == 3
+    assert stress["status_codes"]["ERROR"] == 3
+    assert len(stress["errors"]) == 3
+
+
 @pytest.mark.anyio
 async def test_execute_stress_test_metrics():
     transport = _mock_transport()
