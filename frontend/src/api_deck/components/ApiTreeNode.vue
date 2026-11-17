@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -12,11 +12,15 @@ const emit = defineEmits([
   'select-request',
   'toggle-check',
   'delete-node',
-  'drop-node'
+  'drop-node',
+  'rename-node'
 ])
 
 const isOpen = ref(true)
 const dragPosition = ref(null) // 'inside' | 'before' | 'after' | null
+const isEditingName = ref(false)
+const editingName = ref('')
+const renameInputRef = ref(null)
 
 const effectiveOpen = computed(() => props.forceExpand || isOpen.value)
 const isGroup = computed(() => props.node.node_type === 'group')
@@ -54,11 +58,37 @@ const rollupCounts = computed(() => {
 })
 
 const onRowClick = () => {
+  if (isEditingName.value) return
   if (isGroup.value) {
     isOpen.value = !isOpen.value
   } else {
     emit('select-request', props.node)
   }
+}
+
+const startRename = () => {
+  editingName.value = props.node.name || ''
+  isEditingName.value = true
+  nextTick(() => {
+    if (renameInputRef.value) {
+      renameInputRef.value.focus()
+      renameInputRef.value.select()
+    }
+  })
+}
+
+const commitRename = () => {
+  if (!isEditingName.value) return
+  const trimmed = editingName.value.trim()
+  isEditingName.value = false
+  if (trimmed && trimmed !== props.node.name) {
+    emit('rename-node', { node: props.node, name: trimmed })
+  }
+}
+
+const cancelRename = () => {
+  isEditingName.value = false
+  editingName.value = props.node.name || ''
 }
 
 const onDragStart = (e) => {
@@ -124,7 +154,7 @@ const onDrop = (e) => {
         'outcome-warning': !isGroup && node.last_outcome === 'warning',
         'outcome-failed': !isGroup && node.last_outcome === 'failed'
       }"
-      draggable="true"
+      :draggable="!isEditingName"
       @click="onRowClick"
       @dragstart="onDragStart"
       @dragover="onDragOver"
@@ -154,7 +184,19 @@ const onDrop = (e) => {
       </span>
 
       <div class="api-node-labels">
-        <span class="api-node-name">{{ node.name }}</span>
+        <input
+          v-if="isEditingName"
+          ref="renameInputRef"
+          v-model="editingName"
+          type="text"
+          class="api-node-rename-input"
+          @click.stop
+          @dblclick.stop
+          @keydown.enter.prevent="commitRename"
+          @keydown.escape.prevent="cancelRename"
+          @blur="commitRename"
+        />
+        <span v-else class="api-node-name" @dblclick.stop="startRename">{{ node.name }}</span>
         <span v-if="!isGroup && node.path" class="api-node-path">{{ node.path }}</span>
       </div>
 
@@ -197,6 +239,7 @@ const onDrop = (e) => {
         @toggle-check="emit('toggle-check', $event)"
         @delete-node="emit('delete-node', $event)"
         @drop-node="emit('drop-node', $event)"
+        @rename-node="emit('rename-node', $event)"
       />
     </div>
   </div>
@@ -323,6 +366,18 @@ const onDrop = (e) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.api-node-rename-input {
+  width: 100%;
+  padding: 1px 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-main);
+  background: var(--bg-input);
+  border: 1px solid var(--accent-blue);
+  border-radius: 4px;
+  outline: none;
 }
 
 .api-node-path {

@@ -468,6 +468,71 @@ export function useApiDeck(externalTargetPathRef = null) {
     return null
   }
 
+  const renameApiNode = async ({ node, name }) => {
+    const trimmed = String(name || '').trim()
+    if (!node?.id || !trimmed) return null
+    const current = apiNodes.value.find((n) => n.id === node.id) || node
+    if (trimmed === current.name) return current
+
+    let payload
+    if (activeRequest.value.id === current.id) {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer)
+        autoSaveTimer = null
+      }
+      isHydratingRequest = true
+      activeRequest.value.name = trimmed
+      nextTick(() => {
+        isHydratingRequest = false
+      })
+      payload = serializeActiveRequest()
+      payload.name = trimmed
+      payload.sort_order = current.sort_order
+    } else {
+      payload = {
+        id: current.id,
+        parent_id: current.parent_id || null,
+        node_type: current.node_type || 'request',
+        name: trimmed,
+        sort_order: current.sort_order,
+        method: current.method || 'GET',
+        path: current.path || '',
+        query_params: current.query_params || [],
+        headers: current.headers || [],
+        body_type: current.body_type || 'json',
+        body: current.body ?? '',
+        expected_status: Number(current.expected_status || 200)
+      }
+    }
+
+    try {
+      const res = await fetch('/api/api-deck/nodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_path: targetPathRef?.value || '',
+          node: payload
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        apiNodes.value = data.nodes || apiNodes.value
+        if (activeRequest.value.id === current.id && activeRequest.value.name !== trimmed) {
+          isHydratingRequest = true
+          activeRequest.value.name = trimmed
+          nextTick(() => {
+            isHydratingRequest = false
+          })
+        }
+        saveStatus.value = 'saved'
+        return data.node
+      }
+    } catch (err) {
+      console.error('Failed to rename API node:', err)
+    }
+    return null
+  }
+
   const toggleSelectApiNode = (node) => {
     if (!node) return
     const next = new Set(selectedApiIds.value)
@@ -696,6 +761,7 @@ export function useApiDeck(externalTargetPathRef = null) {
     selectRequestForEdit,
     deleteApiNode,
     moveApiNode,
+    renameApiNode,
     toggleSelectApiNode,
     clearApiSelections,
     saveEnvironment,

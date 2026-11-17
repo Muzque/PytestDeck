@@ -35,6 +35,7 @@ const {
   selectRequestForEdit,
   deleteApiNode,
   moveApiNode,
+  renameApiNode,
   toggleSelectApiNode,
   clearApiSelections,
   saveEnvironment,
@@ -97,6 +98,7 @@ const startResizing = () => {
         @clear-selection="clearApiSelections"
         @delete-node="deleteApiNode"
         @drop-node="moveApiNode"
+        @rename-node="renameApiNode"
         @run-selected="runSelectedApis"
       />
 

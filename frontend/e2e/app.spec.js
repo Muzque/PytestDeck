@@ -1945,6 +1945,47 @@ test.describe('PytestDeck E2E Frontend Suite', () => {
     await expect(page.locator('[data-testid="batch-passed-count"]')).toHaveText('1')
     await expect(page.locator('[data-testid="batch-warning-count"]')).toHaveText('1')
     await expect(page.locator('[data-testid="batch-failed-count"]')).toHaveText('1')
+
+    // 9. Double-click inline rename for Group and API nodes
+    const grpNameEl = groupRow.locator('.api-node-name')
+    await grpNameEl.dblclick()
+    const grpInput = groupRow.locator('.api-node-rename-input')
+    await expect(grpInput).toBeVisible()
+    await grpInput.fill('Core APIs Renamed')
+    await grpInput.press('Enter')
+    await expect(grpNameEl).toHaveText('Core APIs Renamed')
+
+    // Escape cancels rename without modifying name
+    await grpNameEl.dblclick()
+    await expect(grpInput).toBeVisible()
+    await grpInput.fill('Should Cancel')
+    await grpInput.press('Escape')
+    await expect(grpNameEl).toHaveText('Core APIs Renamed')
+
+    // Blank name cancels rename without modifying name
+    await grpNameEl.dblclick()
+    await expect(grpInput).toBeVisible()
+    await grpInput.fill('   ')
+    await grpInput.press('Enter')
+    await expect(grpNameEl).toHaveText('Core APIs Renamed')
+
+    // Double-click API request name -> renames and syncs #api-req-name
+    const echoTreeNode = page.locator('.api-tree-node[data-node-type="request"]', { hasText: 'Echo POST API' }).first()
+    const echoNodeId = await echoTreeNode.getAttribute('data-node-id')
+    const echoRow = page.locator(`.api-tree-node[data-node-id="${echoNodeId}"] > .api-node-row`)
+    await echoRow.locator('.api-node-name').dblclick()
+    const echoInput = echoRow.locator('.api-node-rename-input')
+    await expect(echoInput).toBeVisible()
+    await echoInput.fill('Echo POST Renamed')
+    await echoInput.press('Enter')
+    await expect(page.locator('.api-node-row:has-text("Echo POST Renamed")')).toBeVisible()
+    await expect(page.locator('#api-req-name')).toHaveValue('Echo POST Renamed')
+
+    // Reload page and verify renamed Group and API persist
+    await page.reload()
+    await page.click('#btn-mode-api')
+    await expect(page.locator('.api-node-row:has-text("Core APIs Renamed")').first()).toBeVisible()
+    await expect(page.locator('.api-node-row:has-text("Echo POST Renamed")').first()).toBeVisible()
   })
 
   test('should enable Copy Failed button on Terminal Output header only when tests fail and copy final failed logs', async ({ page, context }) => {

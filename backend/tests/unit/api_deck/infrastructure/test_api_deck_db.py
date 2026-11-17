@@ -143,6 +143,45 @@ def test_api_nodes_upsert_group_move_and_cascade_delete(tmp_path: Path):
     assert db.list_api_nodes() == []
 
 
+def test_api_node_rename_preserves_fields_and_run_status(tmp_path: Path):
+    db_file = tmp_path / "rename.db"
+    db = ApiDeckDatabase(target_path=tmp_path, db_path=db_file)
+
+    grp = db.upsert_api_node({"id": "grp-1", "name": "Old Group", "node_type": "group"})
+    req = db.upsert_api_node(
+        {
+            "id": "req-1",
+            "parent_id": grp["id"],
+            "name": "Old Request",
+            "node_type": "request",
+            "method": "POST",
+            "path": "/api/items",
+            "query_params": [{"key": "q", "value": "1", "enabled": True}],
+            "headers": [{"key": "X-Test", "value": "yes", "enabled": True}],
+            "body_type": "json",
+            "body": '{"ok": true}',
+            "expected_status": 201,
+        }
+    )
+    db.update_api_node_run_status("req-1", 201, 14.2, "passed", {"size_bytes": 64})
+
+    # Rename group with full payload
+    db.upsert_api_node({**grp, "name": "Renamed Group"})
+    # Rename request with full payload
+    db.upsert_api_node({**req, "name": "Renamed Request"})
+
+    nodes = {n["id"]: n for n in db.list_api_nodes()}
+    assert nodes["grp-1"]["name"] == "Renamed Group"
+    assert nodes["req-1"]["name"] == "Renamed Request"
+    assert nodes["req-1"]["parent_id"] == "grp-1"
+    assert nodes["req-1"]["method"] == "POST"
+    assert nodes["req-1"]["path"] == "/api/items"
+    assert nodes["req-1"]["body"] == '{"ok": true}'
+    assert nodes["req-1"]["expected_status"] == 201
+    assert nodes["req-1"]["last_status"] == 201
+    assert nodes["req-1"]["last_outcome"] == "passed"
+
+
 def test_api_nodes_scoped_per_environment_and_isolated(tmp_path: Path):
     db_file = tmp_path / "scoped.db"
     db = ApiDeckDatabase(target_path=tmp_path, db_path=db_file)

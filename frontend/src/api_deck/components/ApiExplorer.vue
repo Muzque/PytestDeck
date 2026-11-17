@@ -18,6 +18,7 @@ const emit = defineEmits([
   'clear-selection',
   'delete-node',
   'drop-node',
+  'rename-node',
   'run-selected'
 ])
 
@@ -186,6 +187,7 @@ const onRootDrop = (e) => {
         @toggle-check="emit('toggle-check', $event)"
         @delete-node="emit('delete-node', $event)"
         @drop-node="emit('drop-node', $event)"
+        @rename-node="emit('rename-node', $event)"
       />
     </div>
     <div v-else class="tree-loading api-empty-state">
