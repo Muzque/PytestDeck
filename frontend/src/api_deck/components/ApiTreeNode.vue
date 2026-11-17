@@ -16,7 +16,7 @@ const emit = defineEmits([
 ])
 
 const isOpen = ref(true)
-const isDragOver = ref(false)
+const dragPosition = ref(null) // 'inside' | 'before' | 'after' | null
 
 const effectiveOpen = computed(() => props.forceExpand || isOpen.value)
 const isGroup = computed(() => props.node.node_type === 'group')
@@ -66,21 +66,29 @@ const onDragStart = (e) => {
   e.dataTransfer.setData('text/plain', props.node.id)
 }
 
+const computeDropPosition = (e) => {
+  if (isGroup.value) return 'inside'
+  const rect = e.currentTarget.getBoundingClientRect()
+  const midY = rect.top + rect.height / 2
+  return e.clientY < midY ? 'before' : 'after'
+}
+
 const onDragOver = (e) => {
   e.preventDefault()
   e.stopPropagation()
-  isDragOver.value = true
+  dragPosition.value = computeDropPosition(e)
 }
 
 const onDragLeave = (e) => {
   e.stopPropagation()
-  isDragOver.value = false
+  dragPosition.value = null
 }
 
 const onDrop = (e) => {
   e.preventDefault()
   e.stopPropagation()
-  isDragOver.value = false
+  const position = computeDropPosition(e)
+  dragPosition.value = null
   const draggedId = e.dataTransfer.getData('text/plain')
   if (!draggedId || draggedId === props.node.id) return
 
@@ -88,15 +96,14 @@ const onDrop = (e) => {
     emit('drop-node', {
       nodeId: draggedId,
       targetParentId: props.node.id,
-      targetIndex: (props.node.children || []).length,
-      createGroupWithNodeId: null
+      targetIndex: (props.node.children || []).length
     })
   } else {
     emit('drop-node', {
       nodeId: draggedId,
       targetParentId: props.node.parent_id || null,
-      targetIndex: 0,
-      createGroupWithNodeId: props.node.id
+      targetNodeId: props.node.id,
+      position
     })
   }
 }
@@ -109,7 +116,9 @@ const onDrop = (e) => {
       :class="{
         'is-active-req': !isGroup && activeRequestId === node.id,
         'is-checked': isChecked,
-        'is-drag-over': isDragOver,
+        'is-drag-over': dragPosition === 'inside',
+        'is-drag-before': dragPosition === 'before',
+        'is-drag-after': dragPosition === 'after',
         'outcome-passed': !isGroup && node.last_outcome === 'passed',
         'outcome-failed': !isGroup && node.last_outcome === 'failed'
       }"
@@ -127,7 +136,7 @@ const onDrop = (e) => {
       >
         {{ effectiveOpen ? '▼' : '▶' }}
       </span>
-      <span v-else class="drag-grip" title="Drag onto another API or Group">⋮⋮</span>
+      <span v-else class="drag-grip" title="Drag to reorder or move into a Group">⋮⋮</span>
 
       <input
         type="checkbox"
@@ -219,6 +228,14 @@ const onDrop = (e) => {
 .api-node-row.is-drag-over {
   background: rgba(99, 102, 241, 0.25);
   outline: 1px dashed var(--accent-blue);
+}
+
+.api-node-row.is-drag-before {
+  box-shadow: inset 0 2px 0 0 var(--accent-blue);
+}
+
+.api-node-row.is-drag-after {
+  box-shadow: inset 0 -2px 0 0 var(--accent-blue);
 }
 
 .api-node-row.outcome-passed {

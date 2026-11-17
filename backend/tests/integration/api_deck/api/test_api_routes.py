@@ -77,7 +77,7 @@ def test_api_deck_routes_end_to_end(tmp_path: Path, monkeypatch):
     )
     assert n2_res.status_code == 200
 
-    # 4. Group api-2 onto api-1 via drag-and-drop move endpoint
+    # 4. Reorder api-2 before api-1 via move endpoint without auto-creating a group
     move_res = client.post(
         "/api/api-deck/nodes/move",
         json={
@@ -85,13 +85,13 @@ def test_api_deck_routes_end_to_end(tmp_path: Path, monkeypatch):
             "node_id": "api-2",
             "target_parent_id": None,
             "target_index": 0,
-            "create_group_with_node_id": "api-1",
-            "group_name": "Core APIs",
         },
     )
     assert move_res.status_code == 200
-    group_id = move_res.json()["group_id"]
-    assert group_id is not None
+    assert move_res.json()["group_id"] is None
+    moved_nodes = move_res.json()["nodes"]
+    assert [n["id"] for n in moved_nodes] == ["api-2", "api-1"]
+    assert all(n["node_type"] == "request" for n in moved_nodes)
 
     # 5. Verify mock endpoints directly
     mock_echo = client.post("/api/api-deck/mock/echo?q=hello", json={"msg": "world"})
@@ -127,4 +127,4 @@ def test_api_deck_routes_end_to_end(tmp_path: Path, monkeypatch):
         json={"target_path": str(tmp_path)},
     )
     assert act_env1.status_code == 200
-    assert len(act_env1.json()["nodes"]) == 3
+    assert [n["id"] for n in act_env1.json()["nodes"]] == ["api-2", "api-1"]

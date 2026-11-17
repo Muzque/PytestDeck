@@ -76,8 +76,7 @@ const onRootDrop = (e) => {
   emit('drop-node', {
     nodeId: draggedId,
     targetParentId: null,
-    targetIndex: props.apiTree.length,
-    createGroupWithNodeId: null
+    targetIndex: props.apiTree.length
   })
 }
 </script>
@@ -166,7 +165,7 @@ const onRootDrop = (e) => {
     </div>
 
     <div class="drag-hint-strip">
-      💡 Tip: Drag an API onto another API or Group to organize into folders.
+      💡 Tip: Drag items to reorder, or drop onto a Group to move inside.
     </div>
 
     <!-- API Tree Container -->

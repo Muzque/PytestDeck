@@ -564,11 +564,9 @@ class ApiDeckDatabase:
         node_id: str,
         target_parent_id: str | None = None,
         target_index: int = 0,
-        create_group_with_node_id: str | None = None,
-        group_name: str | None = None,
         environment_id: str | None = None,
     ) -> dict[str, Any]:
-        """Moves an API node to a new parent/order or groups it with another node within the same environment."""
+        """Moves an API node to a new parent and sibling sort order within the same environment."""
         with self._get_connection() as conn:
             active_env_id = (
                 environment_id
@@ -597,44 +595,6 @@ class ApiDeckDatabase:
                     raise ValueError(
                         "Target parent does not belong to the same environment"
                     )
-
-            if create_group_with_node_id and create_group_with_node_id != node_id:
-                target_row = conn.execute(
-                    "SELECT id, environment_id, parent_id, sort_order, name FROM api_nodes WHERE id = ?",
-                    (create_group_with_node_id,),
-                ).fetchone()
-                if target_row is None or str(target_row["environment_id"] or "") != env_id:
-                    raise ValueError(
-                        "Cannot group nodes across different environments"
-                    )
-                new_group_id = f"grp-{uuid.uuid4().hex[:8]}"
-                g_name = (group_name or f"{target_row['name']} Group").strip()
-                conn.execute(
-                    """
-                    INSERT INTO api_nodes (id, environment_id, parent_id, node_type, name, sort_order, method, path, updated_at)
-                    VALUES (?, ?, ?, 'group', ?, ?, 'GET', '', CURRENT_TIMESTAMP)
-                    """,
-                    (
-                        new_group_id,
-                        env_id,
-                        target_row["parent_id"],
-                        g_name,
-                        int(target_row["sort_order"] or 0),
-                    ),
-                )
-                conn.execute(
-                    "UPDATE api_nodes SET parent_id = ?, sort_order = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND environment_id = ?",
-                    (new_group_id, create_group_with_node_id, env_id),
-                )
-                conn.execute(
-                    "UPDATE api_nodes SET parent_id = ?, sort_order = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND environment_id = ?",
-                    (new_group_id, node_id, env_id),
-                )
-                conn.commit()
-                return {
-                    "group_id": new_group_id,
-                    "nodes": self.list_api_nodes(environment_id=env_id),
-                }
 
             siblings = conn.execute(
                 """

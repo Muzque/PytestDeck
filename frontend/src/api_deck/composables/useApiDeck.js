@@ -432,9 +432,20 @@ export function useApiDeck(externalTargetPathRef = null) {
     nodeId,
     targetParentId = null,
     targetIndex = 0,
-    createGroupWithNodeId = null,
-    groupName = null
+    targetNodeId = null,
+    position = null
   }) => {
+    let resolvedIndex = targetIndex
+    if (targetNodeId && (position === 'before' || position === 'after')) {
+      const parentKey = targetParentId || null
+      const siblings = apiNodes.value.filter(
+        (n) => (n.parent_id || null) === parentKey && n.id !== nodeId
+      )
+      const targetIdx = siblings.findIndex((n) => n.id === targetNodeId)
+      if (targetIdx !== -1) {
+        resolvedIndex = position === 'before' ? targetIdx : targetIdx + 1
+      }
+    }
     try {
       const res = await fetch('/api/api-deck/nodes/move', {
         method: 'POST',
@@ -443,9 +454,7 @@ export function useApiDeck(externalTargetPathRef = null) {
           target_path: targetPathRef?.value || '',
           node_id: nodeId,
           target_parent_id: targetParentId,
-          target_index: targetIndex,
-          create_group_with_node_id: createGroupWithNodeId,
-          group_name: groupName
+          target_index: resolvedIndex
         })
       })
       if (res.ok) {
@@ -454,7 +463,7 @@ export function useApiDeck(externalTargetPathRef = null) {
         return data
       }
     } catch (err) {
-      console.error('Failed to move/group API node:', err)
+      console.error('Failed to move API node:', err)
     }
     return null
   }
