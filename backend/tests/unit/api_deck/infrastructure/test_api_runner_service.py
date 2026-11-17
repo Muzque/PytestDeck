@@ -30,6 +30,10 @@ def _mock_transport() -> httpx.AsyncBaseTransport:
             )
         if path == "/fail":
             return httpx.Response(500, json={"error": "server failure"})
+        if path == "/forbidden":
+            return httpx.Response(403, json={"error": "forbidden"})
+        if path == "/no-content":
+            return httpx.Response(204)
         return httpx.Response(404, json={"error": "not found"})
 
     return httpx.MockTransport(handler)
@@ -103,8 +107,97 @@ async def test_execute_single_and_batch_requests():
     batch = await execute_batch_requests([node1, node2], env, transport=transport)
     assert batch["total"] == 2
     assert batch["passed"] == 1
+    assert batch["warning"] == 0
     assert batch["failed"] == 1
     assert len(batch["results"]) == 2
+
+
+@pytest.mark.anyio
+async def test_2xx_passes_and_4xx_warns_across_single_batch_and_stress():
+    transport = _mock_transport()
+    env = {
+        "base_url": "http://test.local",
+        "auth_type": "none",
+        "auth_config": {},
+        "default_headers": [],
+    }
+    created_node = {
+        "id": "req-201",
+        "name": "Create",
+        "method": "POST",
+        "path": "/echo",
+        "body_type": "json",
+        "body": '{"ok": true}',
+        "expected_status": 200,  # default 200 should allow any 2xx
+    }
+    no_content_node = {
+        "id": "req-204",
+        "name": "No Content",
+        "method": "DELETE",
+        "path": "/no-content",
+        "expected_status": 200,
+    }
+    forbidden_node = {
+        "id": "req-403",
+        "name": "Forbidden",
+        "method": "GET",
+        "path": "/forbidden",
+        "expected_status": 200,
+    }
+    not_found_node = {
+        "id": "req-404",
+        "name": "Not Found",
+        "method": "GET",
+        "path": "/missing",
+        "expected_status": 200,
+    }
+    fail_node = {
+        "id": "req-500",
+        "name": "Server Error",
+        "method": "GET",
+        "path": "/fail",
+        "expected_status": 200,
+    }
+
+    assert (await execute_single_request(created_node, env, transport=transport))["outcome"] == "passed"
+    assert (await execute_single_request(no_content_node, env, transport=transport))["outcome"] == "passed"
+    assert (await execute_single_request(forbidden_node, env, transport=transport))["outcome"] == "warning"
+    assert (await execute_single_request(not_found_node, env, transport=transport))["outcome"] == "warning"
+    assert (await execute_single_request(fail_node, env, transport=transport))["outcome"] == "failed"
+
+    # Explicit non-200 expected_status still enforces exact match
+    strict_201 = {**created_node, "expected_status": 201}
+    strict_201_on_200 = {"id": "req-strict", "method": "GET", "path": "/users", "expected_status": 201}
+    strict_403 = {**forbidden_node, "expected_status": 403}
+    assert (await execute_single_request(strict_201, env, transport=transport))["outcome"] == "passed"
+    assert (await execute_single_request(strict_201_on_200, env, transport=transport))["outcome"] == "failed"
+    assert (await execute_single_request(strict_403, env, transport=transport))["outcome"] == "passed"
+
+    # Batch summary separates passed, warning, failed
+    batch = await execute_batch_requests(
+        [created_node, no_content_node, forbidden_node, fail_node],
+        env,
+        transport=transport,
+    )
+    assert batch["total"] == 4
+    assert batch["passed"] == 2
+    assert batch["warning"] == 1
+    assert batch["failed"] == 1
+    assert batch["passed"] + batch["warning"] + batch["failed"] == batch["total"]
+
+    # Stress test counts 4xx as warning_count and does not add to errors or fail_count
+    stress = await execute_stress_test(
+        node=forbidden_node,
+        env=env,
+        total_requests=6,
+        concurrency=2,
+        transport=transport,
+    )
+    assert stress["success_count"] == 0
+    assert stress["warning_count"] == 6
+    assert stress["fail_count"] == 0
+    assert stress["errors"] == []
+    assert stress["status_codes"]["403"] == 6
 
 
 @pytest.mark.anyio

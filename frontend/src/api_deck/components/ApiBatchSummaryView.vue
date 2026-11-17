@@ -24,6 +24,10 @@ const emit = defineEmits(['inspect-result'])
           <span class="bk-val passed" data-testid="batch-passed-count">{{ batchSummary.passed }}</span>
         </div>
         <div class="batch-kpi">
+          <span class="bk-label">Warning</span>
+          <span class="bk-val warning" data-testid="batch-warning-count">{{ batchSummary.warning ?? 0 }}</span>
+        </div>
+        <div class="batch-kpi">
           <span class="bk-label">Failed</span>
           <span class="bk-val failed" data-testid="batch-failed-count">{{ batchSummary.failed }}</span>
         </div>
@@ -58,7 +62,7 @@ const emit = defineEmits(['inspect-result'])
             >
               <td>
                 <span class="outcome-pill" :class="item.outcome">
-                  {{ item.outcome === 'passed' ? '✓ PASS' : '✗ FAIL' }}
+                  {{ item.outcome === 'passed' ? '✓ PASS' : item.outcome === 'warning' ? '⚠ WARN' : '✗ FAIL' }}
                 </span>
               </td>
               <td>
@@ -124,6 +128,10 @@ const emit = defineEmits(['inspect-result'])
   color: var(--accent-green);
 }
 
+.bk-val.warning {
+  color: var(--accent-yellow);
+}
+
 .bk-val.failed {
   color: var(--accent-red);
 }
@@ -173,6 +181,11 @@ const emit = defineEmits(['inspect-result'])
 .outcome-pill.passed {
   color: var(--accent-green);
   background: rgba(52, 211, 153, 0.15);
+}
+
+.outcome-pill.warning {
+  color: var(--accent-yellow);
+  background: rgba(251, 191, 36, 0.16);
 }
 
 .outcome-pill.failed {

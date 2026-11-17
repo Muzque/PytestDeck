@@ -423,7 +423,7 @@ const formatBytes = (bytes) => {
           <template v-if="response">
             <span
               class="resp-status-badge"
-              :class="response.outcome === 'passed' ? 'passed' : 'failed'"
+              :class="response.outcome || 'failed'"
               data-testid="api-response-status"
             >
               {{ response.status_code ?? 'ERR' }}
@@ -831,6 +831,12 @@ const formatBytes = (bytes) => {
   background: rgba(52, 211, 153, 0.16);
   color: var(--accent-green);
   border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.resp-status-badge.warning {
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(251, 191, 36, 0.35);
 }
 
 .resp-status-badge.failed {

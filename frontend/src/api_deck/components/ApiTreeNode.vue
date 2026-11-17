@@ -40,12 +40,13 @@ const isChecked = computed(() => {
 })
 
 const rollupCounts = computed(() => {
-  if (!isGroup.value) return { total: 0, passed: 0, failed: 0 }
-  const counts = { total: 0, passed: 0, failed: 0 }
+  if (!isGroup.value) return { total: 0, passed: 0, warning: 0, failed: 0 }
+  const counts = { total: 0, passed: 0, warning: 0, failed: 0 }
   const walk = (item) => {
     if (item.node_type === 'request') {
       counts.total++
       if (item.last_outcome === 'passed') counts.passed++
+      else if (item.last_outcome === 'warning') counts.warning++
       else if (item.last_outcome === 'failed') counts.failed++
     }
     if (item.children) {
@@ -150,6 +151,7 @@ const onDrop = (e) => {
         'is-drag-before': dragPosition === 'before',
         'is-drag-after': dragPosition === 'after',
         'outcome-passed': !isGroup && node.last_outcome === 'passed',
+        'outcome-warning': !isGroup && node.last_outcome === 'warning',
         'outcome-failed': !isGroup && node.last_outcome === 'failed'
       }"
       :draggable="!isEditingName"
@@ -201,6 +203,7 @@ const onDrop = (e) => {
       <!-- Group rollup chips -->
       <div v-if="isGroup && rollupCounts.total > 0" class="group-rollup">
         <span v-if="rollupCounts.passed > 0" class="rollup-tag passed">{{ rollupCounts.passed }} ✓</span>
+        <span v-if="rollupCounts.warning > 0" class="rollup-tag warning">{{ rollupCounts.warning }} ⚠</span>
         <span v-if="rollupCounts.failed > 0" class="rollup-tag failed">{{ rollupCounts.failed }} ✗</span>
         <span class="rollup-tag count">{{ rollupCounts.total }}</span>
       </div>
@@ -209,7 +212,7 @@ const onDrop = (e) => {
       <span
         v-if="!isGroup && node.last_status"
         class="req-status-chip"
-        :class="node.last_outcome === 'passed' ? 'passed' : 'failed'"
+        :class="node.last_outcome || 'failed'"
       >
         {{ node.last_status }} · {{ Math.round(node.last_duration_ms || 0) }}ms
       </span>
@@ -283,6 +286,10 @@ const onDrop = (e) => {
 
 .api-node-row.outcome-passed {
   border-left-color: var(--accent-green);
+}
+
+.api-node-row.outcome-warning {
+  border-left-color: var(--accent-yellow);
 }
 
 .api-node-row.outcome-failed {
@@ -395,6 +402,11 @@ const onDrop = (e) => {
   background: rgba(52, 211, 153, 0.12);
 }
 
+.req-status-chip.warning {
+  color: var(--accent-yellow);
+  background: rgba(251, 191, 36, 0.14);
+}
+
 .req-status-chip.failed {
   color: var(--accent-red);
   background: rgba(248, 113, 113, 0.14);
@@ -416,6 +428,11 @@ const onDrop = (e) => {
 .rollup-tag.passed {
   color: var(--accent-green);
   background: rgba(52, 211, 153, 0.14);
+}
+
+.rollup-tag.warning {
+  color: var(--accent-yellow);
+  background: rgba(251, 191, 36, 0.16);
 }
 
 .rollup-tag.failed {

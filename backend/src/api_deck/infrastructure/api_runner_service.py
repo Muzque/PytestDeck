@@ -94,9 +94,15 @@ def build_resolved_request(
 def _evaluate_outcome(status_code: int | None, expected_status: int | None) -> str:
     if status_code is None:
         return "failed"
-    if expected_status is not None and expected_status > 0:
-        return "passed" if status_code == expected_status else "failed"
-    return "passed" if 200 <= status_code < 300 else "failed"
+    if expected_status is not None and expected_status > 0 and expected_status != 200:
+        if status_code == expected_status:
+            return "passed"
+        return "warning" if 400 <= status_code < 500 else "failed"
+    if 200 <= status_code < 300:
+        return "passed"
+    if 400 <= status_code < 500:
+        return "warning"
+    return "failed"
 
 
 def _format_response_body(text: str, content_type: str) -> str:
@@ -131,7 +137,7 @@ async def execute_single_request(
         resp = await active_client.request(
             method=resolved["method"],
             url=resolved["url"],
-            params=resolved["params"],
+            params=resolved["params"] or None,
             headers=resolved["headers"],
             content=resolved["content"],
         )
@@ -187,6 +193,7 @@ async def execute_batch_requests(
         return {
             "total": 0,
             "passed": 0,
+            "warning": 0,
             "failed": 0,
             "avg_ms": 0.0,
             "total_ms": 0.0,
@@ -210,13 +217,15 @@ async def execute_batch_requests(
 
     total_ms = round((time.perf_counter_ns() - batch_start) / 1_000_000, 2)
     passed = sum(1 for r in results if r["outcome"] == "passed")
-    failed = len(results) - passed
+    warning = sum(1 for r in results if r["outcome"] == "warning")
+    failed = sum(1 for r in results if r["outcome"] == "failed")
     durations = [float(r["duration_ms"]) for r in results]
     avg_ms = round(sum(durations) / len(durations), 2) if durations else 0.0
 
     return {
         "total": len(results),
         "passed": passed,
+        "warning": warning,
         "failed": failed,
         "avg_ms": avg_ms,
         "total_ms": total_ms,
@@ -249,6 +258,7 @@ async def execute_stress_test(
     status_codes: dict[str, int] = {}
     errors: list[str] = []
     success_count = 0
+    warning_count = 0
     fail_count = 0
 
     limits = httpx.Limits(
@@ -270,7 +280,7 @@ async def execute_stress_test(
                     resp = await client.request(
                         method=resolved["method"],
                         url=resolved["url"],
-                        params=resolved["params"],
+                        params=resolved["params"] or None,
                         headers=resolved["headers"],
                         content=resolved["content"],
                     )
@@ -293,6 +303,8 @@ async def execute_stress_test(
         status_codes[key] = status_codes.get(key, 0) + 1
         if outcome == "passed":
             success_count += 1
+        elif outcome == "warning":
+            warning_count += 1
         else:
             fail_count += 1
         if err and len(errors) < 20:
@@ -313,6 +325,7 @@ async def execute_stress_test(
         "total_requests": total_n,
         "concurrency": conc_c,
         "success_count": success_count,
+        "warning_count": warning_count,
         "fail_count": fail_count,
         "avg_ms": avg_ms,
         "min_ms": min_ms,
