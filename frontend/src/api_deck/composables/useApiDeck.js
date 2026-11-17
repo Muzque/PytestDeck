@@ -1,4 +1,6 @@
 import { ref, computed, watch, nextTick } from 'vue'
+import { useApiEnvironments } from './useApiEnvironments'
+import { useApiExecution } from './useApiExecution'
 
 export function useApiDeck(externalTargetPathRef = null) {
   const internalTargetPath = ref('')
@@ -30,8 +32,6 @@ export function useApiDeck(externalTargetPathRef = null) {
   }
   initDefaultTargetPath()
 
-  const environments = ref([])
-  const showEnvModal = ref(false)
   const apiNodes = ref([])
   const selectedApiIds = ref(new Set())
   const activeRequestId = ref(null)
@@ -51,36 +51,16 @@ export function useApiDeck(externalTargetPathRef = null) {
   })
 
   const saveStatus = ref('saved')
-  const isSending = ref(false)
-  const currentResponse = ref(null)
-
-  const isRunningBatch = ref(false)
-  const batchSummary = ref(null)
-
-  const isRunningStress = ref(false)
-  const stressConfig = ref({
-    totalRequests: 20,
-    concurrency: 5
-  })
-  const stressResult = ref(null)
 
   let autoSaveTimer = null
   let isHydratingRequest = false
 
-  const activeEnv = computed(() => {
-    const found = environments.value.find((e) => e.is_active)
-    if (found) return found
-    if (environments.value.length > 0) return environments.value[0]
-    return {
-      id: '',
-      name: 'Default (Current Host)',
-      base_url: typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:9388',
-      auth_type: 'none',
-      auth_config: {},
-      default_headers: [],
-      is_active: true
+  const clearAutoSaveTimer = () => {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+      autoSaveTimer = null
     }
-  })
+  }
 
   const apiTree = computed(() => {
     const map = new Map()
@@ -572,167 +552,45 @@ export function useApiDeck(externalTargetPathRef = null) {
     selectedApiIds.value = new Set()
   }
 
-  const saveEnvironment = async (envPayload) => {
-    const prevEnvId = activeEnv.value?.id || ''
-    const isSwitchingToNewActive = Boolean(envPayload?.is_active) && envPayload?.id !== prevEnvId
-    if (isSwitchingToNewActive && activeRequest.value.id) {
-      await flushAutoSave()
-    }
-    try {
-      const res = await fetch('/api/api-deck/environments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_path: targetPathRef?.value || '',
-          environment: envPayload
-        })
-      })
-      if (res.ok) {
-        const data = await res.json()
-        environments.value = data.environments || []
-        if (Array.isArray(data.nodes)) {
-          if (isSwitchingToNewActive) {
-            syncEditorAfterCollectionChange(data.nodes)
-          } else {
-            apiNodes.value = data.nodes
-          }
-        }
-        return data.environment
-      }
-    } catch (err) {
-      console.error('Failed to save API environment:', err)
-    }
-    return null
-  }
+  const {
+    environments,
+    activeEnv,
+    showEnvModal,
+    saveEnvironment,
+    activateEnvironment,
+    deleteEnvironment
+  } = useApiEnvironments({
+    targetPathRef,
+    activeRequest,
+    apiNodes,
+    flushAutoSave,
+    clearAutoSaveTimer,
+    syncEditorAfterCollectionChange
+  })
 
-  const activateEnvironment = async (envId) => {
-    if (!envId) return
-    if (activeRequest.value.id) {
-      await flushAutoSave()
-    }
-    try {
-      const res = await fetch(`/api/api-deck/environments/${encodeURIComponent(envId)}/activate`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target_path: targetPathRef?.value || '' })
-      })
-      if (res.ok) {
-        const data = await res.json()
-        environments.value = data.environments || []
-        syncEditorAfterCollectionChange(data.nodes || [])
-      }
-    } catch (err) {
-      console.error('Failed to activate environment:', err)
-    }
-  }
-
-  const deleteEnvironment = async (envId) => {
-    if (!envId) return
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer)
-      autoSaveTimer = null
-    }
-    try {
-      const tp = encodeURIComponent(targetPathRef?.value || '')
-      const res = await fetch(`/api/api-deck/environments/${encodeURIComponent(envId)}?target_path=${tp}`, {
-        method: 'DELETE'
-      })
-      if (res.ok) {
-        const data = await res.json()
-        environments.value = data.environments || []
-        syncEditorAfterCollectionChange(data.nodes || [])
-      }
-    } catch (err) {
-      console.error('Failed to delete environment:', err)
-    }
-  }
-
-  const sendCurrentRequest = async () => {
-    if (isSending.value) return
-    isSending.value = true
-    try {
-      const payload = serializeActiveRequest()
-      const res = await fetch('/api/api-deck/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_path: targetPathRef?.value || '',
-          node: payload,
-          environment: activeEnv.value
-        })
-      })
-      if (res.ok) {
-        const data = await res.json()
-        currentResponse.value = data.result
-        apiNodes.value = data.nodes || apiNodes.value
-        if (!activeRequest.value.id && data.result?.node_id) {
-          activeRequest.value.id = data.result.node_id
-          activeRequestId.value = data.result.node_id
-        }
-        saveStatus.value = 'saved'
-      }
-    } catch (err) {
-      console.error('Failed to send API request:', err)
-    } finally {
-      isSending.value = false
-    }
-  }
-
-  const runSelectedApis = async () => {
-    if (isRunningBatch.value) return
-    await flushAutoSave()
-    isRunningBatch.value = true
-    apiActiveTab.value = 'batch'
-    try {
-      const ids = Array.from(selectedApiIds.value)
-      const res = await fetch('/api/api-deck/run-batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_path: targetPathRef?.value || '',
-          node_ids: ids,
-          environment: activeEnv.value
-        })
-      })
-      if (res.ok) {
-        const data = await res.json()
-        batchSummary.value = data.batch
-        apiNodes.value = data.nodes || apiNodes.value
-      }
-    } catch (err) {
-      console.error('Failed to run batch APIs:', err)
-    } finally {
-      isRunningBatch.value = false
-    }
-  }
-
-  const runStressTest = async () => {
-    if (isRunningStress.value) return
-    isRunningStress.value = true
-    try {
-      const payload = serializeActiveRequest()
-      const res = await fetch('/api/api-deck/stress', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_path: targetPathRef?.value || '',
-          node: payload,
-          environment: activeEnv.value,
-          total_requests: Number(stressConfig.value.totalRequests || 20),
-          concurrency: Number(stressConfig.value.concurrency || 5)
-        })
-      })
-      if (res.ok) {
-        const data = await res.json()
-        stressResult.value = data.stress
-        saveStatus.value = 'saved'
-      }
-    } catch (err) {
-      console.error('Failed to run stress test:', err)
-    } finally {
-      isRunningStress.value = false
-    }
-  }
+  const {
+    isSending,
+    currentResponse,
+    isRunningBatch,
+    batchSummary,
+    isRunningStress,
+    stressConfig,
+    stressResult,
+    sendCurrentRequest,
+    runSelectedApis,
+    runStressTest
+  } = useApiExecution({
+    targetPathRef,
+    apiActiveTab,
+    activeEnv,
+    apiNodes,
+    selectedApiIds,
+    activeRequestId,
+    activeRequest,
+    saveStatus,
+    serializeActiveRequest,
+    flushAutoSave
+  })
 
   return {
     targetPath: targetPathRef,
